@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>后台管理 - 炽橙 AI 视频提示词</title>
+    <link rel="stylesheet" href="/static/admin.css?v=202605292002">
+</head>
+<body>
+    <div class="admin-shell">
+        <aside class="sidebar">
+            <div>
+                <div class="brand">
+                    <h1>炽橙 AI 视频提示词后台</h1>
+                    <p>知识库运营控制台</p>
+                </div>
+                <nav class="menu" aria-label="后台菜单">
+                    <a class="menu-item menu-link" href="/admin/users" data-view="users">用户管理</a>
+                    <a class="menu-item menu-link" href="/admin/kb-files" data-view="kb">知识库文件管理</a>
+                    <a class="menu-item menu-link" href="/admin/prompts" data-view="prompts">系统提示词管理</a>
+                </nav>
+            </div>
+            <div class="sidebar-foot">PostgreSQL 管运营数据，Milvus 管向量索引</div>
+        </aside>
+
+        <section class="workspace">
+            <header class="topbar">
+                <h2 id="pageTitle">后台管理</h2>
+                <div class="admin-meta">
+                    <span id="currentAdmin">管理员</span>
+                    <button id="logoutBtn" class="btn btn-secondary" type="button">退出登录</button>
+                </div>
+            </header>
+
+            <main class="content">
+                <section id="usersView" class="admin-view">
+                    <section class="panel filters">
+                        <label class="field">
+                            <span>手机号</span>
+                            <input id="mobileFilter" type="text" placeholder="按手机号搜索">
+                        </label>
+                        <label class="field">
+                            <span>角色</span>
+                            <select id="roleFilter">
+                                <option value="">全部</option>
+                                <option value="user">普通用户</option>
+                                <option value="admin">管理员</option>
+                                <option value="super_admin">超级管理员</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>状态</span>
+                            <select id="statusFilter">
+                                <option value="">全部</option>
+                                <option value="1">正常</option>
+                                <option value="0">禁用</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>会员等级</span>
+                            <select id="levelFilter">
+                                <option value="">全部</option>
+                                <option value="normal">普通会员</option>
+                                <option value="premium">高级会员</option>
+                                <option value="super">超级会员</option>
+                            </select>
+                        </label>
+                        <button id="userSearchBtn" class="btn btn-primary" type="button">查询</button>
+                        <button id="userResetBtn" class="btn btn-secondary" type="button">重置</button>
+                    </section>
+
+                    <section class="panel table-panel">
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>手机号</th>
+                                        <th>昵称</th>
+                                        <th>角色</th>
+                                        <th>积分</th>
+                                        <th>会员等级</th>
+                                        <th>状态</th>
+                                        <th>最近登录</th>
+                                        <th>注册时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="usersTbody"></tbody>
+                            </table>
+                        </div>
+                        <div id="usersEmpty" class="empty" hidden>暂无用户</div>
+                        <div class="pagination">
+                            <span id="usersPageMeta" class="pagination-meta"></span>
+                            <div class="pagination-buttons">
+                                <button id="usersPrevBtn" class="btn btn-secondary" type="button">上一页</button>
+                                <button id="usersNextBtn" class="btn btn-secondary" type="button">下一页</button>
+                            </div>
+                        </div>
+                    </section>
+                </section>
+
+                <section id="kbView" class="admin-view" hidden>
+                    <section class="panel form-panel">
+                        <form id="kbUploadForm" class="upload-grid">
+                            <label class="field">
+                                <span>上传文件</span>
+                                <input id="kbUploadFile" type="file" accept=".md,.txt">
+                            </label>
+                            <label class="field">
+                                <span>知识库分类</span>
+                                <input id="kbUploadCategory" type="text" value="default" placeholder="例如：动作提示词">
+                            </label>
+                            <label class="field">
+                                <span>描述</span>
+                                <input id="kbUploadDescription" type="text" placeholder="可选">
+                            </label>
+                            <button class="btn btn-primary" type="submit">上传并向量化</button>
+                            <button id="kbImportExistingBtn" class="btn btn-secondary" type="button">导入现有文件</button>
+                        </form>
+                        <p id="kbUploadMessage" class="message"></p>
+                    </section>
+
+                    <section class="panel filters">
+                        <label class="field">
+                            <span>文件名</span>
+                            <input id="kbKeywordFilter" type="text" placeholder="搜索文件名或标题">
+                        </label>
+                        <label class="field">
+                            <span>分类</span>
+                            <input id="kbCategoryFilter" type="text" placeholder="全部分类">
+                        </label>
+                        <label class="field">
+                            <span>向量状态</span>
+                            <select id="kbStatusFilter">
+                                <option value="">全部</option>
+                                <option value="pending">待处理</option>
+                                <option value="processing">向量化中</option>
+                                <option value="success">已入库</option>
+                                <option value="failed">失败</option>
+                            </select>
+                        </label>
+                        <label class="field">
+                            <span>是否启用</span>
+                            <select id="kbEnabledFilter">
+                                <option value="">全部</option>
+                                <option value="true">启用</option>
+                                <option value="false">停用</option>
+                            </select>
+                        </label>
+                        <button id="kbSearchBtn" class="btn btn-primary" type="button">查询</button>
+                        <button id="kbResetBtn" class="btn btn-secondary" type="button">重置</button>
+                    </section>
+
+                    <section class="panel table-panel">
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>文件名</th>
+                                        <th>类型</th>
+                                        <th>分类</th>
+                                        <th>切片</th>
+                                        <th>向量状态</th>
+                                        <th>启用</th>
+                                        <th>上传人</th>
+                                        <th>上传时间</th>
+                                        <th>更新时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="kbTbody"></tbody>
+                            </table>
+                        </div>
+                        <div id="kbEmpty" class="empty" hidden>暂无知识库文件</div>
+                        <div class="pagination">
+                            <span id="kbPageMeta" class="pagination-meta"></span>
+                            <div class="pagination-buttons">
+                                <button id="kbPrevBtn" class="btn btn-secondary" type="button">上一页</button>
+                                <button id="kbNextBtn" class="btn btn-secondary" type="button">下一页</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="panel form-panel">
+                        <div class="section-title">
+                            <h3>知识库检索测试</h3>
+                        </div>
+                        <form id="kbSearchTestForm" class="test-grid">
+                            <label class="field">
+                                <span>问题</span>
+                                <input id="kbSearchQuery" type="text" placeholder="例如：人物哭泣动作怎么写">
+                            </label>
+                            <label class="field compact-field">
+                                <span>Top K</span>
+                                <input id="kbSearchTopK" type="number" min="1" max="20" value="5">
+                            </label>
+                            <label class="field compact-field">
+                                <span>分类</span>
+                                <input id="kbSearchCategory" type="text" placeholder="可选">
+                            </label>
+                            <button class="btn btn-primary" type="submit">测试</button>
+                        </form>
+                        <div id="kbSearchResults" class="result-list"></div>
+                    </section>
+                </section>
+
+                <section id="promptsView" class="admin-view" hidden>
+                    <section class="panel filters">
+                        <label class="field">
+                            <span>关键词</span>
+                            <input id="promptKeywordFilter" type="text" placeholder="搜索名称、编码或内容">
+                        </label>
+                        <label class="field">
+                            <span>提示词类型</span>
+                            <input id="promptTypeFilter" type="text" placeholder="全部类型">
+                        </label>
+                        <label class="field">
+                            <span>状态</span>
+                            <select id="promptEnabledFilter">
+                                <option value="">全部</option>
+                                <option value="true">启用中</option>
+                                <option value="false">未启用</option>
+                            </select>
+                        </label>
+                        <button id="promptSearchBtn" class="btn btn-primary" type="button">查询</button>
+                        <button id="promptResetBtn" class="btn btn-secondary" type="button">重置</button>
+                        <button id="promptNewBtn" class="btn btn-primary" type="button">新增提示词</button>
+                    </section>
+
+                    <section class="panel table-panel">
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>名称</th>
+                                        <th>编码</th>
+                                        <th>类型</th>
+                                        <th>版本</th>
+                                        <th>状态</th>
+                                        <th>最后修改人</th>
+                                        <th>更新时间</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="promptsTbody"></tbody>
+                            </table>
+                        </div>
+                        <div id="promptsEmpty" class="empty" hidden>暂无系统提示词</div>
+                        <div class="pagination">
+                            <span id="promptsPageMeta" class="pagination-meta"></span>
+                            <div class="pagination-buttons">
+                                <button id="promptsPrevBtn" class="btn btn-secondary" type="button">上一页</button>
+                                <button id="promptsNextBtn" class="btn btn-secondary" type="button">下一页</button>
+                            </div>
+                        </div>
+                    </section>
+                </section>
+            </main>
+        </section>
+    </div>
+
+    <div id="drawerMask" class="drawer-mask"></div>
+    <aside id="sideDrawer" class="drawer" aria-label="详情">
+        <div class="drawer-header">
+            <h3 id="drawerTitle">详情</h3>
+            <button class="btn btn-secondary" id="drawerCloseBtn" type="button">关闭</button>
+        </div>
+        <div id="drawerBody" class="drawer-body"></div>
+    </aside>
+
+    <dialog id="userDialog" class="modal">
+        <div class="modal-header">
+            <h3>编辑用户</h3>
+            <button class="btn btn-secondary" data-close-dialog="userDialog" type="button">关闭</button>
+        </div>
+        <form id="userForm" class="modal-body">
+            <label class="field">
+                <span>昵称</span>
+                <input id="userNickname" type="text" maxlength="50">
+            </label>
+            <label id="userRoleField" class="field">
+                <span>角色</span>
+                <select id="userRole">
+                    <option value="user">普通用户</option>
+                    <option value="admin">管理员</option>
+                    <option value="super_admin">超级管理员</option>
+                </select>
+            </label>
+            <label class="field">
+                <span>状态</span>
+                <select id="userStatus">
+                    <option value="1">正常</option>
+                    <option value="0">禁用</option>
+                </select>
+            </label>
+            <p id="userMessage" class="message"></p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" data-close-dialog="userDialog" type="button">取消</button>
+                <button class="btn btn-primary" type="submit">保存</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="kbDialog" class="modal">
+        <div class="modal-header">
+            <h3>编辑知识库文件</h3>
+            <button class="btn btn-secondary" data-close-dialog="kbDialog" type="button">关闭</button>
+        </div>
+        <form id="kbForm" class="modal-body">
+            <label class="field">
+                <span>标题</span>
+                <input id="kbEditTitle" type="text" maxlength="255">
+            </label>
+            <label class="field">
+                <span>分类</span>
+                <input id="kbEditCategory" type="text" maxlength="100">
+            </label>
+            <label class="field">
+                <span>描述</span>
+                <textarea id="kbEditDescription"></textarea>
+            </label>
+            <p id="kbEditMessage" class="message"></p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" data-close-dialog="kbDialog" type="button">取消</button>
+                <button class="btn btn-primary" type="submit">保存</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="kbContentDialog" class="modal modal-document">
+        <div class="modal-header">
+            <h3 id="kbContentTitle">编辑切片文档</h3>
+            <button class="btn btn-secondary" data-close-dialog="kbContentDialog" type="button">关闭</button>
+        </div>
+        <form id="kbContentForm" class="modal-body document-editor-body">
+            <label class="field document-editor-field">
+                <span>文档内容</span>
+                <textarea id="kbContentEditor" class="code-textarea document-textarea" spellcheck="false"></textarea>
+            </label>
+            <label class="check-field">
+                <input id="kbContentReindex" type="checkbox">
+                <span>保存后立即重新向量化</span>
+            </label>
+            <p id="kbContentMessage" class="message"></p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" data-close-dialog="kbContentDialog" type="button">取消</button>
+                <button class="btn btn-primary" type="submit">保存文档</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="promptDialog" class="modal modal-wide">
+        <div class="modal-header">
+            <h3 id="promptDialogTitle">编辑提示词</h3>
+            <button class="btn btn-secondary" data-close-dialog="promptDialog" type="button">关闭</button>
+        </div>
+        <form id="promptForm" class="modal-body prompt-editor-grid">
+            <div class="prompt-editor-main">
+                <label class="field">
+                    <span>提示词编码</span>
+                    <input id="promptKey" type="text" maxlength="100">
+                </label>
+                <label class="field">
+                    <span>提示词名称</span>
+                    <input id="promptName" type="text" maxlength="100">
+                </label>
+                <label class="field">
+                    <span>提示词类型</span>
+                    <input id="promptType" type="text" maxlength="100">
+                </label>
+                <label class="field">
+                    <span>提示词内容</span>
+                    <textarea id="promptContent" class="code-textarea"></textarea>
+                </label>
+                <label class="field">
+                    <span>备注</span>
+                    <textarea id="promptRemark"></textarea>
+                </label>
+                <label id="promptEnableOnCreateField" class="check-field">
+                    <input id="promptEnableOnCreate" type="checkbox">
+                    <span>创建后立即启用</span>
+                </label>
+            </div>
+            <div class="prompt-test-side">
+                <label class="field">
+                    <span>测试输入</span>
+                    <textarea id="promptTestInput" placeholder="生成一个冷艳女杀手"></textarea>
+                </label>
+                <button id="promptTestBtn" class="btn btn-secondary" type="button">测试预览</button>
+                <pre id="promptTestOutput" class="test-output"></pre>
+            </div>
+            <p id="promptMessage" class="message full-row"></p>
+            <div class="modal-actions full-row">
+                <button class="btn btn-secondary" data-close-dialog="promptDialog" type="button">取消</button>
+                <button class="btn btn-primary" type="submit">保存</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script src="/static/admin-users.js?v=202605291956"></script>
+</body>
+</html>

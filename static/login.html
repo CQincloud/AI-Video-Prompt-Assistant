@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>炬成 AI 视频提示词创作入口</title>
+    <link rel="preload" as="image" type="image/webp" href="/static/assets/login-bg.v1.webp" fetchpriority="high">
+    <link rel="preload" as="image" type="image/webp" href="/static/assets/huobao-top.v2.webp" fetchpriority="high">
+    <link rel="preload" as="image" type="image/webp" href="/static/assets/jucheng-logo-login.v1.webp">
+    <link rel="stylesheet" href="/static/login.css?v=20260525-image-perf1">
+</head>
+<body>
+    <main class="login-shell">
+        <a class="admin-entry" href="/admin/login" aria-label="打开管理后台">
+            <span class="admin-entry-icon" aria-hidden="true"></span>
+            <span>管理后台</span>
+            <span aria-hidden="true">→</span>
+        </a>
+
+        <section class="brand-visual" aria-label="炬成科技品牌区">
+            <div class="brand-overlay"></div>
+            <div class="panel-lines" aria-hidden="true"></div>
+            <div class="brand-content">
+                <img class="brand-logo" src="/static/assets/jucheng-logo-login.v1.webp" alt="炬成科技" decoding="async" fetchpriority="high">
+                <div class="brand-copy">
+                    <p class="eyebrow">AI COMIC PRODUCTION ENTRY</p>
+                    <h1>今日炬火，明日成山</h1>
+                    <p class="brand-subtitle">AI 视频提示词知识库助手，让创作更高效</p>
+                    <p class="brand-description">
+                        连接知识库、角色设定、剧本流程与创作资产，帮助您更高效的创造。
+                    </p>
+                </div>
+            </div>
+            <div class="brand-metrics" aria-label="产品能力">
+                <span>AI 视频提示词知识库</span>
+                <span>角色设定资产</span>
+                <span>剧本流程协同</span>
+            </div>
+        </section>
+
+        <section class="auth-panel" aria-label="登录注册">
+            <div class="mobile-login-brand" aria-label="炬成科技">
+                <img src="/static/assets/jucheng-logo-login.v1.webp" alt="炬成科技" decoding="async" fetchpriority="high">
+                <p>AI 视频提示词知识库助手</p>
+            </div>
+            <div class="auth-stage">
+                <div class="auth-card-wrap">
+                    <div class="mascot-peek" aria-label="火宝问候">
+                        <img src="/static/assets/huobao-top.v2.webp" alt="火宝" decoding="async" fetchpriority="high">
+                        <div class="mascot-greeting">你好呀，我是火宝，和我一起进入 AI 视频创作的世界。</div>
+                    </div>
+
+                    <div class="auth-card">
+                        <div class="auth-heading">
+                            <p class="auth-kicker">JUCHENG AI ENTRY</p>
+                            <h2>进入 AI 视频提示词创作中枢</h2>
+                            <p>用手机号验证码进入知识库、角色设定与剧本资产空间。</p>
+                        </div>
+
+                        <form class="auth-form" id="loginForm" novalidate>
+                            <label class="field">
+                                <span>手机号</span>
+                                <input id="phoneInput" type="tel" inputmode="numeric" autocomplete="tel" maxlength="11" placeholder="请输入手机号">
+                            </label>
+
+                            <label class="field">
+                                <span>验证码</span>
+                                <div class="code-row">
+                                    <input id="codeInput" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="请输入短信验证码">
+                                    <button id="sendCodeBtn" type="button" class="code-btn">获取验证码</button>
+                                </div>
+                            </label>
+
+                            <p id="authMessage" class="auth-message" role="status" aria-live="polite"></p>
+
+                            <button id="loginBtn" type="submit" class="primary-btn">立即进入</button>
+                        </form>
+
+                        <p class="auth-terms">
+                            未注册手机号将自动创建账号。登录即代表同意
+                            <a href="#" aria-label="用户协议">《用户协议》</a>
+                            和
+                            <a href="#" aria-label="隐私政策">《隐私政策》</a>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/login.js?v=20260525-admin-entry1"></script>
+</body>
+</html>
