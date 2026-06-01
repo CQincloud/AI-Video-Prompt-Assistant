@@ -8,7 +8,7 @@ from sse_starlette.sse import EventSourceResponse
 from loguru import logger
 
 from app.models.aiops import AIOpsRequest
-from app.services.aiops_service import aiops_service
+from app.services.aiops_service import get_aiops_service
 
 router = APIRouter()
 
@@ -126,6 +126,7 @@ async def diagnose_stream(request: AIOpsRequest):
 
     async def event_generator():
         try:
+            aiops_service = get_aiops_service()
             async for event in aiops_service.diagnose(session_id=session_id):
                 # 发送事件
                 yield {

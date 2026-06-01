@@ -23,7 +23,6 @@ from app.models.response import ApiResponse, SessionInfoResponse
 from app.services.auth_service import auth_service
 from app.services.chat_history_service import ChatHistoryError, chat_history_service
 from app.services.image_ai_service import ImageAIError, image_ai_service
-from app.services.admin_prompt_service import admin_prompt_service
 from app.services.rag_agent_service import rag_agent_service
 from loguru import logger
 
@@ -267,30 +266,6 @@ async def get_attachment_content(attachment_id: int, request: Request):
         media_type=attachment.get("mimeType") or "application/octet-stream",
         filename=attachment.get("fileName") or file_path.name,
     )
-
-
-@router.get("/prompt-templates")
-async def get_prompt_templates(request: Request):
-    """Return active prompt templates for the chat UI."""
-    _require_user(request)
-    template_map = {
-        "character": "character_generation",
-        "scene": "scene_generation",
-        "expression": "expression_voice",
-        "storyboard": "shot_generation",
-        "action": "action_generation",
-        "plot": "script_generation",
-    }
-    templates: dict[str, dict[str, str]] = {}
-    for template_key, prompt_key in template_map.items():
-        try:
-            templates[template_key] = {
-                "promptKey": prompt_key,
-                "instruction": admin_prompt_service.get_active_prompt(prompt_key),
-            }
-        except Exception as exc:
-            logger.debug(f"Prompt template fallback for {prompt_key}: {exc}")
-    return {"code": 200, "message": "success", "data": {"templates": templates}}
 
 
 @router.post("/chat_vision")

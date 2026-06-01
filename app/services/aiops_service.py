@@ -337,5 +337,11 @@ class AIOpsService:
             }
 
 
-# 全局单例
-aiops_service = AIOpsService()
+_aiops_service: AIOpsService | None = None
+
+
+def get_aiops_service() -> AIOpsService:
+    global _aiops_service
+    if _aiops_service is None:
+        _aiops_service = AIOpsService()
+    return _aiops_service
