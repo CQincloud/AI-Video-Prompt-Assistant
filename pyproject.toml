@@ -1,7 +1,7 @@
 [project]
 name = "super-biz-agent-py"
 version = "1.2.1"
-description = "基于 LangChain 的智能业务代理系统 - 支持 RAG 知识库和 AIOps 智能运维"
+description = "FastAPI AI video prompt assistant with RAG knowledge retrieval, Qwen streaming responses, AIOps tools, and admin workflows."
 authors = [{name = "chief"}]
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -12,7 +12,6 @@ dependencies = [
     "langchain>=0.1.0",
     "langchain-community>=0.0.20",
     "langchain-core>=0.1.0",
-    "langchain-openai>=1.0.0",
     "langgraph>=0.0.40",
     "dashscope>=1.14.0",
     "openai>=1.10.0",
@@ -21,7 +20,6 @@ dependencies = [
     "pydantic-settings>=2.1.0",
     "httpx>=0.26.0",
     "aiohttp>=3.9.0",
-    "aiofiles>=23.2.0",
     "python-multipart>=0.0.6",
     "loguru>=0.7.2",
     "python-dotenv>=1.0.0",
@@ -182,7 +180,7 @@ skips = ["*/test_*.py", "*_test.py"]
 include = ["app"]
 exclude = ["**/node_modules", "**/__pycache__", ".git", ".venv", "venv", "logs"]
 pythonVersion = "3.11"
-pythonPlatform = "Darwin"
+pythonPlatform = "Windows"
 typeCheckingMode = "basic"
 
 reportMissingImports = "none"

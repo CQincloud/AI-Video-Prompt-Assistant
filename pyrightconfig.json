@@ -4,11 +4,14 @@
     "**/node_modules",
     "**/__pycache__",
     ".git",
+    ".venv",
+    "venv",
     "logs"
   ],
-  "pythonPath": "/Library/Frameworks/Python.framework/Versions/3.10/bin/python3",
-  "pythonVersion": "3.10",
-  "pythonPlatform": "Darwin",
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "pythonPlatform": "Windows",
   "typeCheckingMode": "basic",
   
   "reportMissingImports": "none",
