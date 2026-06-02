@@ -645,6 +645,11 @@ class ChatHistoryService:
             "metadata": metadata,
             "prompt": metadata.get("prompt") if isinstance(metadata, dict) else None,
             "modelPrompt": metadata.get("modelPrompt") if isinstance(metadata, dict) else None,
+            "model": metadata.get("model") if isinstance(metadata, dict) else None,
+            "modelDisplayName": (
+                metadata.get("modelDisplayName") if isinstance(metadata, dict) else None
+            ),
+            "modelProvider": metadata.get("modelProvider") if isinstance(metadata, dict) else None,
             "promptTemplate": metadata.get("promptTemplate") if isinstance(metadata, dict) else None,
             "retryOf": metadata.get("retryOf") if isinstance(metadata, dict) else None,
             "timestamp": self._iso(row.get("created_at")),

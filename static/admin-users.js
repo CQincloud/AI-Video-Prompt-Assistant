@@ -6,10 +6,12 @@ class AdminApp {
             users: { page: 1, pageSize: 10, totalPages: 0, rows: [] },
             kb: { page: 1, pageSize: 10, totalPages: 0, rows: [] },
             prompts: { page: 1, pageSize: 10, totalPages: 0, rows: [] },
+            models: { page: 1, pageSize: 10, totalPages: 0, rows: [] },
         };
         this.activeUser = null;
         this.activeDocument = null;
         this.activePrompt = null;
+        this.activeModel = null;
 
         this.bindElements();
         this.bindEvents();
@@ -24,6 +26,7 @@ class AdminApp {
             users: document.getElementById("usersView"),
             kb: document.getElementById("kbView"),
             prompts: document.getElementById("promptsView"),
+            models: document.getElementById("modelsView"),
         };
         this.drawerMask = document.getElementById("drawerMask");
         this.sideDrawer = document.getElementById("sideDrawer");
@@ -103,6 +106,25 @@ class AdminApp {
         this.promptTestBtn = document.getElementById("promptTestBtn");
         this.promptTestOutput = document.getElementById("promptTestOutput");
         this.promptMessage = document.getElementById("promptMessage");
+
+        this.modelKeywordFilter = document.getElementById("modelKeywordFilter");
+        this.modelEnabledFilter = document.getElementById("modelEnabledFilter");
+        this.modelsTbody = document.getElementById("modelsTbody");
+        this.modelsEmpty = document.getElementById("modelsEmpty");
+        this.modelsPageMeta = document.getElementById("modelsPageMeta");
+        this.modelsPrevBtn = document.getElementById("modelsPrevBtn");
+        this.modelsNextBtn = document.getElementById("modelsNextBtn");
+        this.modelDialog = document.getElementById("modelDialog");
+        this.modelDialogTitle = document.getElementById("modelDialogTitle");
+        this.modelForm = document.getElementById("modelForm");
+        this.modelDisplayName = document.getElementById("modelDisplayName");
+        this.modelId = document.getElementById("modelId");
+        this.modelProvider = document.getElementById("modelProvider");
+        this.modelSortOrder = document.getElementById("modelSortOrder");
+        this.modelEnabled = document.getElementById("modelEnabled");
+        this.modelDefault = document.getElementById("modelDefault");
+        this.modelRemark = document.getElementById("modelRemark");
+        this.modelMessage = document.getElementById("modelMessage");
     }
 
     bindEvents() {
@@ -166,6 +188,20 @@ class AdminApp {
             this.savePrompt();
         });
         this.promptTestBtn.addEventListener("click", () => this.testPromptPreview());
+
+        document.getElementById("modelSearchBtn").addEventListener("click", () => {
+            this.state.models.page = 1;
+            this.loadModels();
+        });
+        document.getElementById("modelResetBtn").addEventListener("click", () => this.resetModels());
+        document.getElementById("modelNewBtn").addEventListener("click", () => this.openModelEditor());
+        this.modelsPrevBtn.addEventListener("click", () => this.changePage("models", -1));
+        this.modelsNextBtn.addEventListener("click", () => this.changePage("models", 1));
+        this.modelsTbody.addEventListener("click", (event) => this.handleModelAction(event));
+        this.modelForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            this.saveModel();
+        });
     }
 
     async init() {
@@ -182,6 +218,7 @@ class AdminApp {
     resolveView() {
         if (window.location.pathname.includes("/admin/kb-files")) return "kb";
         if (window.location.pathname.includes("/admin/prompts")) return "prompts";
+        if (window.location.pathname.includes("/admin/models")) return "models";
         return "users";
     }
 
@@ -190,6 +227,7 @@ class AdminApp {
             users: "用户管理",
             kb: "知识库文件管理",
             prompts: "系统提示词管理",
+            models: "模型管理",
         };
         this.pageTitle.textContent = titles[this.view];
         Object.entries(this.views).forEach(([key, node]) => {
@@ -201,6 +239,7 @@ class AdminApp {
         if (this.view === "users") this.loadUsers();
         if (this.view === "kb") this.loadKbDocuments();
         if (this.view === "prompts") this.loadPrompts();
+        if (this.view === "models") this.loadModels();
     }
 
     async request(url, options = {}) {
@@ -224,6 +263,7 @@ class AdminApp {
         if (key === "users") this.loadUsers();
         if (key === "kb") this.loadKbDocuments();
         if (key === "prompts") this.loadPrompts();
+        if (key === "models") this.loadModels();
     }
 
     async loadUsers() {
@@ -805,6 +845,192 @@ class AdminApp {
         } catch (error) {
             this.promptTestOutput.textContent = error.message;
         }
+    }
+
+    async loadModels() {
+        const params = new URLSearchParams({
+            page: String(this.state.models.page),
+            page_size: String(this.state.models.pageSize),
+        });
+        if (this.modelKeywordFilter.value.trim()) params.set("keyword", this.modelKeywordFilter.value.trim());
+        if (this.modelEnabledFilter.value) params.set("enabled", this.modelEnabledFilter.value);
+        const result = await this.request(`/api/admin/model-catalog?${params.toString()}`);
+        this.state.models.rows = result.data.list;
+        this.state.models.totalPages = result.data.total_pages;
+        this.renderModels(result.data);
+    }
+
+    renderModels(data) {
+        this.modelsTbody.innerHTML = "";
+        this.modelsEmpty.hidden = data.list.length > 0;
+        data.list.forEach((model) => {
+            const usage = model.usage || {};
+            const row = document.createElement("tr");
+            row.innerHTML = `
+                <td>
+                    <strong>${this.escape(model.displayName)}</strong>
+                    ${model.isDefault ? `<span class="badge badge-success">默认</span>` : ""}
+                </td>
+                <td>${this.escape(model.modelId)}</td>
+                <td>${this.statusBadge(model.enabled, "启用中", "已停用")}</td>
+                <td>${usage.today || 0}</td>
+                <td>${usage.month || 0}</td>
+                <td>${usage.total || 0}</td>
+                <td>${usage.failureTotal || 0}</td>
+                <td>${this.formatDate(usage.lastUsedAt)}</td>
+                <td>
+                    <div class="actions">
+                        <button class="btn-text" data-action="usage" data-id="${model.id}">用量</button>
+                        <button class="btn-text" data-action="edit" data-id="${model.id}">编辑</button>
+                        ${model.isDefault ? "" : `<button class="btn-text" data-action="default" data-id="${model.id}">设默认</button>`}
+                        <button class="btn-text" data-action="enable" data-id="${model.id}">${model.enabled ? "停用" : "启用"}</button>
+                        ${model.isDefault ? "" : `<button class="btn-text danger" data-action="delete" data-id="${model.id}">删除</button>`}
+                    </div>
+                </td>
+            `;
+            this.modelsTbody.appendChild(row);
+        });
+        this.modelsPageMeta.textContent = `共 ${data.total} 条，第 ${data.page} / ${Math.max(data.total_pages, 1)} 页`;
+        this.modelsPrevBtn.disabled = data.page <= 1;
+        this.modelsNextBtn.disabled = !data.total_pages || data.page >= data.total_pages;
+    }
+
+    resetModels() {
+        this.modelKeywordFilter.value = "";
+        this.modelEnabledFilter.value = "";
+        this.state.models.page = 1;
+        this.loadModels();
+    }
+
+    async handleModelAction(event) {
+        const button = event.target.closest("[data-action]");
+        if (!button) return;
+        const action = button.dataset.action;
+        const id = Number(button.dataset.id);
+        if (action === "usage") return this.openModelUsage(id);
+        if (action === "edit") return this.openModelEditor(id);
+        if (action === "default") return this.setDefaultModel(id);
+        if (action === "enable") return this.toggleModelEnabled(id);
+        if (action === "delete") return this.deleteModel(id);
+    }
+
+    openModelEditor(id = null) {
+        this.activeModel = null;
+        this.modelDialogTitle.textContent = id ? "编辑模型" : "新增模型";
+        this.modelMessage.textContent = "";
+        if (!id) {
+            this.modelDisplayName.value = "";
+            this.modelId.value = "";
+            this.modelProvider.value = "dashscope";
+            this.modelSortOrder.value = "100";
+            this.modelEnabled.checked = true;
+            this.modelDefault.checked = false;
+            this.modelRemark.value = "";
+            this.modelDialog.showModal();
+            return;
+        }
+        this.request(`/api/admin/model-catalog/${id}`).then((result) => {
+            this.activeModel = result.data;
+            this.modelDisplayName.value = this.activeModel.displayName;
+            this.modelId.value = this.activeModel.modelId;
+            this.modelProvider.value = this.activeModel.provider;
+            this.modelSortOrder.value = String(this.activeModel.sortOrder || 100);
+            this.modelEnabled.checked = Boolean(this.activeModel.enabled);
+            this.modelDefault.checked = Boolean(this.activeModel.isDefault);
+            this.modelRemark.value = this.activeModel.remark || "";
+            this.modelDialog.showModal();
+        });
+    }
+
+    async saveModel() {
+        const payload = {
+            display_name: this.modelDisplayName.value.trim(),
+            model_id: this.modelId.value.trim(),
+            provider: this.modelProvider.value.trim() || "dashscope",
+            enabled: this.modelEnabled.checked,
+            is_default: this.modelDefault.checked,
+            sort_order: Number(this.modelSortOrder.value || 100),
+            remark: this.modelRemark.value.trim(),
+        };
+        if (!payload.display_name || !payload.model_id) {
+            this.modelMessage.textContent = "请填写模型名称和模型 ID";
+            return;
+        }
+        try {
+            if (this.activeModel) {
+                await this.request(`/api/admin/model-catalog/${this.activeModel.id}`, {
+                    method: "PUT",
+                    body: JSON.stringify(payload),
+                });
+            } else {
+                await this.request("/api/admin/model-catalog", {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                });
+            }
+            this.modelDialog.close();
+            await this.loadModels();
+        } catch (error) {
+            this.modelMessage.textContent = error.message;
+        }
+    }
+
+    async toggleModelEnabled(id) {
+        const model = this.state.models.rows.find((item) => item.id === id);
+        if (!model) return;
+        const nextEnabled = !model.enabled;
+        if (!window.confirm(`确认${nextEnabled ? "启用" : "停用"}模型 ${model.modelId}？`)) return;
+        await this.request(`/api/admin/model-catalog/${id}/enabled`, {
+            method: "PATCH",
+            body: JSON.stringify({ enabled: nextEnabled }),
+        });
+        await this.loadModels();
+    }
+
+    async setDefaultModel(id) {
+        const model = this.state.models.rows.find((item) => item.id === id);
+        if (!model) return;
+        if (!window.confirm(`确认将 ${model.modelId} 设为默认模型？`)) return;
+        await this.request(`/api/admin/model-catalog/${id}/default`, { method: "PATCH" });
+        await this.loadModels();
+    }
+
+    async deleteModel(id) {
+        const model = this.state.models.rows.find((item) => item.id === id);
+        if (!model) return;
+        if (!window.confirm(`确认删除模型 ${model.modelId}？历史用量统计会保留。`)) return;
+        await this.request(`/api/admin/model-catalog/${id}`, { method: "DELETE" });
+        await this.loadModels();
+    }
+
+    async openModelUsage(id) {
+        const result = await this.request(`/api/admin/model-catalog/${id}/usage?days=30`);
+        const data = result.data;
+        const summary = data.summary || {};
+        const topUsers = data.topUsers || [];
+        const topUsersHtml = topUsers.length
+            ? `<div class="log-list">${topUsers.map((item) => `
+                <article class="log-item">
+                    <div class="log-title">
+                        <strong>${this.escape(item.nickname || item.mobile || "未知用户")}</strong>
+                        <span>${item.usageTotal} 次</span>
+                    </div>
+                    <p>最近使用：${this.formatDate(item.lastUsedAt)}</p>
+                </article>
+            `).join("")}</div>`
+            : `<div class="empty">近 30 天暂无用户使用记录</div>`;
+        this.openDrawer("模型用量", `
+            <div class="detail-list">
+                ${this.detailRow("模型", `${this.escape(data.model.displayName)} / ${this.escape(data.model.modelId)}`)}
+                ${this.detailRow("近 30 天调用", summary.total || 0)}
+                ${this.detailRow("成功", summary.successTotal || 0)}
+                ${this.detailRow("失败", summary.failureTotal || 0)}
+                ${this.detailRow("平均耗时", summary.avgDurationMs ? `${summary.avgDurationMs} ms` : "-")}
+                ${this.detailRow("最近使用", this.formatDate(summary.lastUsedAt))}
+            </div>
+            <h4 class="drawer-section-title">使用最多的用户</h4>
+            ${topUsersHtml}
+        `);
     }
 
     openDrawer(title, html) {

@@ -205,6 +205,10 @@ button {
     background: transparent;
 }
 
+.btn-text.danger {
+    color: var(--danger);
+}
+
 .message {
     min-height: 20px;
     margin: 2px 0 0;
@@ -453,6 +457,11 @@ tbody tr:hover {
 
 .danger-text {
     color: var(--danger);
+}
+
+.drawer-section-title {
+    margin: 22px 0 10px;
+    font-size: 14px;
 }
 
 .wide-cell {

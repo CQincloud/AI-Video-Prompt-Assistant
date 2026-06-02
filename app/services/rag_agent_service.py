@@ -104,68 +104,78 @@ class RagAgentService:
         self.streaming = streaming
         self.system_prompt = self._build_system_prompt()
 
-
-        self.model = ChatQwen(
-            model=self.model_name,
-            api_key=config.dashscope_api_key,
-            base_url=config.dashscope_base_url,
-            timeout=config.dashscope_request_timeout_seconds,
-            max_retries=config.dashscope_max_retries,
-            temperature=0.2,
-            streaming=streaming,
-            enable_thinking=False,
-        )
-
         # 定义基础工具
         self.tools = [retrieve_knowledge, get_current_time]
 
         # 创建内存检查点（用于会话管理）
         self.checkpointer = MemorySaver()
 
-        # Agent 初始化（会在异步方法中完成）
+        # Agent 按模型缓存，避免切换模型时每次请求都重建。
         self.agent = None
-        self._agent_initialized = False
-        self._agent_init_lock: asyncio.Lock | None = None
+        self._agents: dict[str, Any] = {}
+        self._models: dict[str, ChatQwen] = {}
+        self._agent_init_locks: dict[str, asyncio.Lock] = {}
         self._grounding_cache: OrderedDict[str, tuple[float, list[Document]]] = OrderedDict()
         self._grounded_prompt_cache: OrderedDict[str, tuple[float, str, str]] = OrderedDict()
 
         logger.info(f"RAG Agent 服务初始化完成 (ChatQwen), model={self.model_name}, streaming={streaming}")
 
-    async def _initialize_agent(self):
+    def _normalize_model_name(self, model_name: str | None = None) -> str:
+        return (model_name or self.model_name or config.rag_model or "qwen3.7-plus").strip()
+
+    def _create_chat_model(self, model_name: str) -> ChatQwen:
+        return ChatQwen(
+            model=model_name,
+            api_key=config.dashscope_api_key,
+            base_url=config.dashscope_base_url,
+            timeout=config.dashscope_request_timeout_seconds,
+            max_retries=config.dashscope_max_retries,
+            temperature=0.2,
+            streaming=self.streaming,
+            enable_thinking=False,
+        )
+
+    async def _initialize_agent(self, model_name: str | None = None) -> str:
         """异步初始化 Agent。"""
-        if self._agent_initialized:
-            return
+        selected_model = self._normalize_model_name(model_name)
+        if selected_model in self._agents:
+            return selected_model
 
-        if self._agent_init_lock is None:
-            self._agent_init_lock = asyncio.Lock()
+        if selected_model not in self._agent_init_locks:
+            self._agent_init_locks[selected_model] = asyncio.Lock()
 
-        async with self._agent_init_lock:
-            if self._agent_initialized:
-                return
+        async with self._agent_init_locks[selected_model]:
+            if selected_model in self._agents:
+                return selected_model
 
             init_started_at = perf_counter()
 
             all_tools = self.tools
 
             agent_build_started_at = perf_counter()
-            self.agent = create_agent(
-                self.model,
+            model = self._create_chat_model(selected_model)
+            agent = create_agent(
+                model,
                 tools=all_tools,
                 middleware=[trim_messages_middleware],
                 checkpointer=self.checkpointer,
             )
             agent_build_elapsed_ms = (perf_counter() - agent_build_started_at) * 1000
 
-            self._agent_initialized = True
+            self._models[selected_model] = model
+            self._agents[selected_model] = agent
+            if selected_model == self.model_name:
+                self.agent = agent
 
             if all_tools:
                 tool_names = [tool.name if hasattr(tool, "name") else str(tool) for tool in all_tools]
                 logger.info(f"可用工具列表: {', '.join(tool_names)}")
             logger.info(
-                "RAG Agent 初始化耗时: "
+                f"RAG Agent 初始化耗时: model={selected_model}, "
                 f"agent_build={agent_build_elapsed_ms:.1f}ms, "
                 f"total={(perf_counter() - init_started_at) * 1000:.1f}ms"
             )
+        return selected_model
 
     async def warmup(self) -> None:
         """后台预热向量存储与 Agent，减少首请求等待。"""
@@ -1125,16 +1135,18 @@ class RagAgentService:
         )
         return any(pattern in q for pattern in ai_identity_patterns)
 
-    def _build_model_identity_answer(self) -> str:
+    def _build_model_identity_answer(self, model_name: str | None = None) -> str:
+        active_model = self._normalize_model_name(model_name)
         rag_model = config.rag_model or "未配置"
         dashscope_model = config.dashscope_model or "未配置"
-        if rag_model == dashscope_model:
-            summary = f"我当前对话/RAG 使用的模型是 `{rag_model}`。"
+        if active_model == rag_model:
+            summary = f"我当前对话/RAG 使用的模型是 `{active_model}`。"
         else:
-            summary = f"我当前对话/RAG 使用的是 `{rag_model}`，DashScope 默认模型配置是 `{dashscope_model}`。"
+            summary = f"我当前这次对话请求使用的是 `{active_model}`，RAG 默认模型配置是 `{rag_model}`。"
 
         return (
             f"{summary}\n\n"
+            f"- `当前请求模型`: `{active_model}`\n"
             f"- `RAG_MODEL`: `{rag_model}`\n"
             f"- `DASHSCOPE_MODEL`: `{dashscope_model}`\n\n"
             "`RAG_MODEL` 是当前聊天/RAG Agent 实际使用的模型；"
@@ -1437,6 +1449,7 @@ class RagAgentService:
         self,
         question: str,
         session_id: str,
+        model_name: str | None = None,
     ) -> str:
         """
         非流式处理用户问题（一次性返回完整答案）
@@ -1449,6 +1462,7 @@ class RagAgentService:
             str: 完整答案
         """
         try:
+            selected_model = self._normalize_model_name(model_name)
             request_started_at = perf_counter()
             sensitive_category = self._classify_sensitive_info_request(question)
             if sensitive_category:
@@ -1458,14 +1472,15 @@ class RagAgentService:
                 return self._build_sensitive_refusal(sensitive_category)
 
             if self._is_model_identity_request(question):
-                logger.info(f"[会话 {session_id}] 命中模型配置查询，直接返回当前模型配置")
-                return self._build_model_identity_answer()
+                logger.info(f"[会话 {session_id}] 命中模型配置查询，直接返回当前模型配置: model={selected_model}")
+                return self._build_model_identity_answer(selected_model)
 
             init_started_at = perf_counter()
-            await self._initialize_agent()
+            selected_model = await self._initialize_agent(selected_model)
+            agent = self._agents[selected_model]
             init_elapsed_ms = (perf_counter() - init_started_at) * 1000
 
-            logger.info(f"[会话 {session_id}] RAG Agent 收到查询（非流式）: {question}")
+            logger.info(f"[会话 {session_id}] RAG Agent 收到查询（非流式）: model={selected_model}, {question}")
 
             grounding_started_at = perf_counter()
             grounding_metrics = self._collect_grounding_metrics(question)
@@ -1490,7 +1505,7 @@ class RagAgentService:
             }
 
             invoke_started_at = perf_counter()
-            result = await self.agent.ainvoke(
+            result = await agent.ainvoke(
                 input=agent_input,
                 config=config_dict,
             )
@@ -1509,6 +1524,7 @@ class RagAgentService:
 
                 logger.info(
                     f"[会话 {session_id}] RAG Agent 查询完成（非流式）: "
+                    f"model={selected_model}, "
                     f"{self._format_grounding_metrics_summary(doc_cache_hit=grounding_metrics['doc_cache_hit'], prompt_cache_hit=grounding_metrics['prompt_cache_hit'], docs_count=len(grounding_docs))}, "
                     f"init={init_elapsed_ms:.1f}ms, grounding={grounding_elapsed_ms:.1f}ms, "
                     f"invoke={invoke_elapsed_ms:.1f}ms, total={(perf_counter() - request_started_at) * 1000:.1f}ms, "
@@ -1527,6 +1543,7 @@ class RagAgentService:
         self,
         question: str,
         session_id: str,
+        model_name: str | None = None,
         emit_auxiliary_events: bool = False,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         """
@@ -1543,6 +1560,7 @@ class RagAgentService:
                 - data: 具体内容
         """
         try:
+            selected_model = self._normalize_model_name(model_name)
             request_started_at = perf_counter()
             sensitive_category = self._classify_sensitive_info_request(question)
             if sensitive_category:
@@ -1567,8 +1585,8 @@ class RagAgentService:
                 return
 
             if self._is_model_identity_request(question):
-                logger.info(f"[会话 {session_id}] 命中模型配置查询（流式），直接返回当前模型配置")
-                answer = self._build_model_identity_answer()
+                logger.info(f"[会话 {session_id}] 命中模型配置查询（流式），直接返回当前模型配置: model={selected_model}")
+                answer = self._build_model_identity_answer(selected_model)
                 if emit_auxiliary_events:
                     yield {
                         "type": "search_results",
@@ -1586,10 +1604,11 @@ class RagAgentService:
                 return
 
             init_started_at = perf_counter()
-            await self._initialize_agent()
+            selected_model = await self._initialize_agent(selected_model)
+            agent = self._agents[selected_model]
             init_elapsed_ms = (perf_counter() - init_started_at) * 1000
 
-            logger.info(f"[会话 {session_id}] RAG Agent 收到查询（流式）: {question}")
+            logger.info(f"[会话 {session_id}] RAG Agent 收到查询（流式）: model={selected_model}, {question}")
 
             grounding_started_at = perf_counter()
             grounding_metrics = self._collect_grounding_metrics(question)
@@ -1626,7 +1645,7 @@ class RagAgentService:
             first_reasoning_elapsed_ms: float | None = None
             reasoning_char_count = 0
 
-            async for token, metadata in self.agent.astream(
+            async for token, metadata in agent.astream(
                 input=agent_input,
                 config=config_dict,
                 stream_mode="messages",
@@ -1670,6 +1689,7 @@ class RagAgentService:
             answer = "".join(answer_chunks)
             logger.info(
                 f"[会话 {session_id}] RAG Agent 查询完成（流式）: "
+                f"model={selected_model}, "
                 f"{self._format_grounding_metrics_summary(doc_cache_hit=grounding_metrics['doc_cache_hit'], prompt_cache_hit=grounding_metrics['prompt_cache_hit'], docs_count=len(grounding_docs))}, "
                 f"init={init_elapsed_ms:.1f}ms, grounding={grounding_elapsed_ms:.1f}ms, "
                 f"first_reasoning={first_reasoning_elapsed_ms or 0:.1f}ms, "

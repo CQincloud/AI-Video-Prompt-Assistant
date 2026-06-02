@@ -2,9 +2,27 @@
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+MODEL_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
+
+
+def _validate_ai_model_id(value: str) -> str:
+    model_id = value.strip()
+    if not MODEL_ID_PATTERN.fullmatch(model_id):
+        raise ValueError("模型 ID 只能包含字母、数字、点、下划线和短横线")
+    return model_id
+
+
+def _validate_ai_model_provider(value: str) -> str:
+    provider = value.strip().lower()
+    if provider != "dashscope":
+        raise ValueError("当前仅支持 dashscope 模型供应商")
+    return provider
 
 
 class AdminUserUpdateRequest(BaseModel):
@@ -101,3 +119,71 @@ class SystemPromptUpdateRequest(BaseModel):
 class SystemPromptTestRequest(BaseModel):
     prompt_key: str = Field(..., min_length=1, max_length=100)
     test_input: str = Field(..., min_length=1, max_length=4000)
+
+
+class AiModelCreateRequest(BaseModel):
+    model_id: str = Field(..., min_length=1, max_length=120)
+    display_name: str = Field(..., min_length=1, max_length=120)
+    provider: str = Field(default="dashscope", min_length=1, max_length=50)
+    enabled: bool = True
+    is_default: bool = False
+    sort_order: int = Field(default=100, ge=0, le=10000)
+    min_membership_level: str | None = Field(default=None, max_length=50)
+    access_scope: str = Field(default="all", max_length=50)
+    remark: str | None = None
+
+    @field_validator("model_id")
+    @classmethod
+    def validate_model_id(cls, value: str) -> str:
+        return _validate_ai_model_id(value)
+
+    @field_validator("provider")
+    @classmethod
+    def validate_provider(cls, value: str) -> str:
+        return _validate_ai_model_provider(value)
+
+
+class AiModelUpdateRequest(BaseModel):
+    model_id: str | None = Field(default=None, min_length=1, max_length=120)
+    display_name: str | None = Field(default=None, min_length=1, max_length=120)
+    provider: str | None = Field(default=None, min_length=1, max_length=50)
+    enabled: bool | None = None
+    is_default: bool | None = None
+    sort_order: int | None = Field(default=None, ge=0, le=10000)
+    min_membership_level: str | None = Field(default=None, max_length=50)
+    access_scope: str | None = Field(default=None, max_length=50)
+    remark: str | None = None
+
+    @field_validator("model_id")
+    @classmethod
+    def validate_model_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_ai_model_id(value)
+
+    @field_validator("provider")
+    @classmethod
+    def validate_provider(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_ai_model_provider(value)
+
+    @model_validator(mode="after")
+    def ensure_has_changes(self) -> "AiModelUpdateRequest":
+        if (
+            self.model_id is None
+            and self.display_name is None
+            and self.provider is None
+            and self.enabled is None
+            and self.is_default is None
+            and self.sort_order is None
+            and self.min_membership_level is None
+            and self.access_scope is None
+            and self.remark is None
+        ):
+            raise ValueError("至少需要提供一个要修改的字段")
+        return self
+
+
+class AiModelEnabledRequest(BaseModel):
+    enabled: bool

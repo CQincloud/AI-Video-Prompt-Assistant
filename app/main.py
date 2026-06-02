@@ -10,7 +10,18 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
 
-from app.api import admin_auth, admin_kb, admin_prompts, admin_users, aiops, auth, chat, file, health
+from app.api import (
+    admin_auth,
+    admin_kb,
+    admin_models,
+    admin_prompts,
+    admin_users,
+    aiops,
+    auth,
+    chat,
+    file,
+    health,
+)
 from app.config import config
 from app.core.database import close_connection_pool, init_connection_pool
 from app.core.migrations import (
@@ -197,6 +208,7 @@ app.include_router(admin_auth.router, prefix="/api/admin", tags=["后台认证"]
 app.include_router(admin_users.router, prefix="/api/admin", tags=["后台用户管理"])
 app.include_router(admin_kb.router, prefix="/api/admin", tags=["后台知识库管理"])
 app.include_router(admin_prompts.router, prefix="/api/admin", tags=["后台提示词管理"])
+app.include_router(admin_models.router, prefix="/api/admin", tags=["后台模型管理"])
 app.include_router(chat.router, prefix="/api", tags=["对话"])
 app.include_router(file.router, prefix="/api", tags=["文件管理"])
 app.include_router(aiops.router, prefix="/api", tags=["AIOps智能运维"])
@@ -253,6 +265,18 @@ async def admin_kb_files_page(request: Request):
 
 @app.get("/admin/prompts")
 async def admin_prompts_page(request: Request):
+    user = auth_service.get_user_by_token(request.cookies.get(config.auth_cookie_name))
+    if not user or user["role"] not in {"admin", "super_admin"}:
+        return RedirectResponse(url="/admin/login")
+
+    page_path = os.path.join(static_dir, "admin-users.html")
+    if os.path.exists(page_path):
+        return FileResponse(page_path)
+    return RedirectResponse(url="/")
+
+
+@app.get("/admin/models")
+async def admin_models_page(request: Request):
     user = auth_service.get_user_by_token(request.cookies.get(config.auth_cookie_name))
     if not user or user["role"] not in {"admin", "super_admin"}:
         return RedirectResponse(url="/admin/login")

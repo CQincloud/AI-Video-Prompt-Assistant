@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     dashscope_api_key: str = ""  # 默认空字符串，实际使用需从环境变量加载
     dashscope_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     dashscope_task_base_url: str = "https://dashscope.aliyuncs.com/api/v1"
-    dashscope_model: str = "qwen-max"
+    dashscope_model: str = "qwen3.7-plus"
     dashscope_vision_model: str = "qwen-vl-plus"
     dashscope_image_generation_model: str = "wanx2.1-t2i-turbo"
     dashscope_embedding_model: str = "text-embedding-v4"  # v4 支持多种维度（默认 1024）
@@ -102,7 +102,7 @@ class Settings(BaseSettings):
     rag_top_k: int = 3
     rag_grounding_top_k: int = 5
     rag_catalog_top_k: int = 3
-    rag_model: str = "qwen-max"  # 使用快速响应模型，不带扩展思考
+    rag_model: str = "qwen3.7-plus"  # 使用快速响应模型，不带扩展思考
     rag_strict_grounding: bool = True
     rag_grounding_cache_ttl_seconds: int = 60
     rag_grounding_cache_max_entries: int = 128

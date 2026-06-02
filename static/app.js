@@ -32,6 +32,8 @@ class SuperBizAgentApp {
         this.theme = this.loadTheme();
         this.promptTemplates = this.createPromptTemplates();
         this.selectedPromptTemplate = null;
+        this.availableModels = [];
+        this.currentModel = this.loadPreferredModel();
 
         this.initializeElements();
         this.applyTheme(this.theme);
@@ -41,6 +43,7 @@ class SuperBizAgentApp {
         this.updateThemeControls();
         this.renderChatHistory();
         this.loadChatHistoriesFromServer();
+        this.loadChatModelsFromServer();
         this.updateUI();
         this.resizeMessageInput();
         this.checkAndSetCentered();
@@ -81,6 +84,10 @@ class SuperBizAgentApp {
         this.uploadImageItem = document.getElementById("uploadImageItem");
         this.fileInput = document.getElementById("fileInput");
         this.imageInput = document.getElementById("imageInput");
+        this.modelSelectorBtn = document.getElementById("modelSelectorBtn");
+        this.modelDropdown = document.getElementById("modelDropdown");
+        this.modelMenuList = document.getElementById("modelMenuList");
+        this.currentModelText = document.getElementById("currentModelText");
         this.modeSelectorBtn = document.getElementById("modeSelectorBtn");
         this.modeDropdown = document.getElementById("modeDropdown");
         this.currentModeText = document.getElementById("currentModeText");
@@ -171,6 +178,17 @@ class SuperBizAgentApp {
         this.fileInput?.addEventListener("change", (event) => this.handleFileSelect(event));
         this.imageInput?.addEventListener("change", (event) => this.handleImageSelect(event));
 
+        this.modelSelectorBtn?.addEventListener("click", (event) => {
+            event.stopPropagation();
+            this.modelSelectorBtn.closest(".model-selector-wrapper")?.classList.toggle("active");
+        });
+        this.modelMenuList?.addEventListener("click", (event) => {
+            const item = event.target.closest(".model-menu-item");
+            if (!item) return;
+            this.selectModel(item.dataset.model || "");
+            this.closeModelDropdown();
+        });
+
         this.modeSelectorBtn?.addEventListener("click", (event) => {
             event.stopPropagation();
             this.modeSelectorBtn.closest(".mode-selector-wrapper")?.classList.toggle("active");
@@ -185,6 +203,13 @@ class SuperBizAgentApp {
         document.addEventListener("click", (event) => {
             if (this.toolsBtn && !this.toolsBtn.contains(event.target) && !this.toolsMenu?.contains(event.target)) {
                 this.closeToolsMenu();
+            }
+            if (
+                this.modelSelectorBtn &&
+                !this.modelSelectorBtn.contains(event.target) &&
+                !this.modelDropdown?.contains(event.target)
+            ) {
+                this.closeModelDropdown();
             }
             if (
                 this.modeSelectorBtn &&
@@ -309,6 +334,87 @@ class SuperBizAgentApp {
         const template = this.getActivePromptTemplate();
         if (!template) return question;
         return template.runtimeInstruction.replace("{{input}}", question.trim());
+    }
+
+    loadPreferredModel() {
+        return localStorage.getItem("juchengCurrentModel") || "";
+    }
+
+    async loadChatModelsFromServer() {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/chat/model-options`, {
+                credentials: "include",
+            });
+            const result = await this.readJsonResponse(response);
+            this.availableModels = result.data?.models || [];
+            const defaultModel = result.data?.defaultModel;
+            const savedModel = this.currentModel;
+            const hasSavedModel = this.availableModels.some((model) => model.modelId === savedModel);
+            this.currentModel = hasSavedModel
+                ? savedModel
+                : defaultModel?.modelId || this.availableModels[0]?.modelId || savedModel || "";
+            if (this.currentModel) {
+                localStorage.setItem("juchengCurrentModel", this.currentModel);
+            }
+            this.renderModelMenu();
+            this.updateModelUI();
+        } catch (error) {
+            console.warn("加载模型列表失败:", error);
+            if (!this.currentModel) this.currentModel = "qwen3.7-plus";
+            this.availableModels = [{
+                modelId: this.currentModel,
+                displayName: this.currentModel,
+                isDefault: true,
+            }];
+            this.renderModelMenu();
+            this.updateModelUI();
+        }
+    }
+
+    selectModel(modelId) {
+        if (!modelId || this.isStreaming) return;
+        const exists = this.availableModels.some((model) => model.modelId === modelId);
+        if (!exists) return;
+        this.currentModel = modelId;
+        localStorage.setItem("juchengCurrentModel", this.currentModel);
+        this.updateModelUI();
+    }
+
+    getCurrentModel() {
+        return this.currentModel || this.availableModels[0]?.modelId || "";
+    }
+
+    getModelById(modelId) {
+        return this.availableModels.find((model) => model.modelId === modelId) || null;
+    }
+
+    renderModelMenu() {
+        if (!this.modelMenuList) return;
+        if (!this.availableModels.length) {
+            this.modelMenuList.innerHTML = `<div class="dropdown-item-sub">暂无可用模型</div>`;
+            return;
+        }
+        this.modelMenuList.innerHTML = this.availableModels.map((model) => `
+            <div class="model-menu-item" data-model="${this.escapeHtml(model.modelId)}">
+                <div class="dropdown-item-main">
+                    <span>${this.escapeHtml(model.displayName || model.modelId)}</span>
+                    ${model.isDefault ? `<span class="badge-new">默认</span>` : ""}
+                </div>
+                <div class="dropdown-item-sub">${this.escapeHtml(model.modelId)}</div>
+            </div>
+        `).join("");
+        this.updateModelUI();
+    }
+
+    updateModelUI() {
+        const modelId = this.getCurrentModel();
+        const model = this.getModelById(modelId);
+        if (this.currentModelText) {
+            this.currentModelText.textContent = model?.displayName || modelId || "模型";
+        }
+        this.modelMenuList?.querySelectorAll(".model-menu-item").forEach((item) => {
+            item.classList.toggle("active", item.dataset.model === modelId);
+        });
     }
 
     updatePromptTemplateUI() {
@@ -456,6 +562,7 @@ class SuperBizAgentApp {
         if (this.messageInput) {
             this.messageInput.disabled = this.isStreaming;
         }
+        this.updateModelUI();
         this.updatePromptTemplateUI();
         this.updateAllAssistantActions();
     }
@@ -466,6 +573,10 @@ class SuperBizAgentApp {
 
     closeModeDropdown() {
         this.modeSelectorBtn?.closest(".mode-selector-wrapper")?.classList.remove("active");
+    }
+
+    closeModelDropdown() {
+        this.modelSelectorBtn?.closest(".model-selector-wrapper")?.classList.remove("active");
     }
 
     closeTemplateMenu() {
@@ -647,6 +758,7 @@ class SuperBizAgentApp {
             ? this.getActivePromptTemplate()
             : null;
         const modelQuestion = activeTemplate ? this.buildModelQuestion(question) : question;
+        const selectedModel = !isImageGenerationRequest && !isVisionRequest ? this.getCurrentModel() : "";
 
         const imagePayloads = isVisionRequest ? [...this.pendingImages] : [];
         const userImages = imagePayloads.map((image) => ({
@@ -658,6 +770,7 @@ class SuperBizAgentApp {
         }));
         const userMessage = this.addMessage("user", question, true, false, {
             images: userImages,
+            model: selectedModel,
         });
         this.clearPendingImages(!isVisionRequest);
         this.messageInput.value = "";
@@ -670,6 +783,7 @@ class SuperBizAgentApp {
             id: this.generateMessageId(),
             prompt: question,
             modelPrompt: modelQuestion,
+            model: selectedModel,
             promptTemplate: activeTemplate ? this.selectedPromptTemplate : null,
             userMessageId: userMessage.dataset.messageId,
         };
@@ -722,6 +836,7 @@ class SuperBizAgentApp {
                 Id: this.sessionId,
                 Question: question,
                 ModelQuestion: metadata.modelPrompt || question,
+                Model: metadata.model || this.getCurrentModel(),
                 PromptTemplate: metadata.promptTemplate,
                 ClientMessageId: metadata.userMessageId,
                 AssistantMessageId: metadata.id,
@@ -752,6 +867,7 @@ class SuperBizAgentApp {
                     Id: this.sessionId,
                     Question: question,
                     ModelQuestion: metadata.modelPrompt || question,
+                    Model: metadata.model || this.getCurrentModel(),
                     PromptTemplate: metadata.promptTemplate,
                     ClientMessageId: metadata.userMessageId,
                     AssistantMessageId: metadata.id,
@@ -889,6 +1005,7 @@ class SuperBizAgentApp {
                         clientMessageId: metadata.id,
                         metadata: {
                             prompt: metadata.prompt,
+                            model: metadata.model,
                             retryOf: metadata.retryOf,
                             ...extraMetadata,
                         },
@@ -1177,6 +1294,9 @@ class SuperBizAgentApp {
         message.dataset.content = content || "";
         if (metadata.prompt) message.dataset.prompt = metadata.prompt;
         if (metadata.modelPrompt) message.dataset.modelPrompt = metadata.modelPrompt;
+        if (metadata.model) message.dataset.model = metadata.model;
+        if (metadata.modelDisplayName) message.dataset.modelDisplayName = metadata.modelDisplayName;
+        if (metadata.modelProvider) message.dataset.modelProvider = metadata.modelProvider;
         if (metadata.promptTemplate) message.dataset.promptTemplate = metadata.promptTemplate;
         if (metadata.feedback) message.dataset.feedback = metadata.feedback;
         if (metadata.retryOf) message.dataset.retryOf = metadata.retryOf;
@@ -1528,11 +1648,13 @@ class SuperBizAgentApp {
             return;
         }
         const modelPrompt = this.getMessageModelPrompt(messageElement) || prompt;
+        const model = this.getMessageModel(messageElement) || this.getCurrentModel();
 
         const assistantMetadata = {
             id: this.generateMessageId(),
             prompt,
             modelPrompt,
+            model,
             promptTemplate: messageElement.dataset.promptTemplate,
             retryOf: messageElement.dataset.messageId,
         };
@@ -1574,6 +1696,11 @@ class SuperBizAgentApp {
         return this.findHistoryMessageById(messageElement.dataset.messageId)?.modelPrompt || "";
     }
 
+    getMessageModel(messageElement) {
+        if (messageElement.dataset.model) return messageElement.dataset.model;
+        return this.findHistoryMessageById(messageElement.dataset.messageId)?.model || "";
+    }
+
     findHistoryMessageById(messageId) {
         if (!messageId) return null;
         return this.currentChatHistory.find((message) => message.id === messageId) || null;
@@ -1588,6 +1715,9 @@ class SuperBizAgentApp {
         };
         if (metadata.prompt) message.prompt = metadata.prompt;
         if (metadata.modelPrompt) message.modelPrompt = metadata.modelPrompt;
+        if (metadata.model) message.model = metadata.model;
+        if (metadata.modelDisplayName) message.modelDisplayName = metadata.modelDisplayName;
+        if (metadata.modelProvider) message.modelProvider = metadata.modelProvider;
         if (metadata.promptTemplate) message.promptTemplate = metadata.promptTemplate;
         if (metadata.feedback) message.feedback = metadata.feedback;
         if (metadata.feedbackUpdatedAt) message.feedbackUpdatedAt = metadata.feedbackUpdatedAt;
@@ -1604,12 +1734,14 @@ class SuperBizAgentApp {
             id: metadata.id || messageElement.dataset.messageId,
             prompt: metadata.prompt || messageElement.dataset.prompt,
             modelPrompt: metadata.modelPrompt || messageElement.dataset.modelPrompt,
+            model: metadata.model || messageElement.dataset.model,
             promptTemplate: metadata.promptTemplate || messageElement.dataset.promptTemplate,
         });
         this.currentChatHistory.push(historyMessage);
         messageElement.dataset.messageId = historyMessage.id;
         if (historyMessage.prompt) messageElement.dataset.prompt = historyMessage.prompt;
         if (historyMessage.modelPrompt) messageElement.dataset.modelPrompt = historyMessage.modelPrompt;
+        if (historyMessage.model) messageElement.dataset.model = historyMessage.model;
         if (historyMessage.promptTemplate) messageElement.dataset.promptTemplate = historyMessage.promptTemplate;
         if (historyMessage.retryOf) messageElement.dataset.retryOf = historyMessage.retryOf;
         this.updateAssistantActions(messageElement);

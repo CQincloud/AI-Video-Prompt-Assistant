@@ -1,4 +1,4 @@
-﻿:root {
+:root {
     --bg: #faf8f5;
     --panel: #fffdf9;
     --sidebar: #f3f0ea;
@@ -69,6 +69,7 @@ body,
 .user-menu,
 .account-pill,
 .tools-menu,
+.model-dropdown,
 .mode-dropdown,
 .message-actions {
     transition:
@@ -1359,7 +1360,8 @@ button {
 .left-actions,
 .right-actions,
 .tools-btn-wrapper,
-.template-selector-wrapper {
+.template-selector-wrapper,
+.model-selector-wrapper {
     display: flex;
     align-items: center;
     gap: 8px;
@@ -1460,12 +1462,14 @@ button {
 
 .tools-btn-wrapper,
 .template-selector-wrapper,
+.model-selector-wrapper,
 .mode-selector-wrapper {
     position: relative;
 }
 
 .tools-menu,
 .template-menu,
+.model-dropdown,
 .mode-dropdown {
     position: absolute;
     bottom: calc(100% + 8px);
@@ -1494,8 +1498,14 @@ button {
     right: 0;
 }
 
+.model-dropdown {
+    right: 0;
+    min-width: 240px;
+}
+
 .tools-btn-wrapper.active .tools-menu,
 .template-selector-wrapper.active .template-menu,
+.model-selector-wrapper.active .model-dropdown,
 .mode-selector-wrapper.active .mode-dropdown {
     opacity: 1;
     visibility: visible;
@@ -1504,6 +1514,7 @@ button {
 
 .tools-menu-item,
 .template-menu-item,
+.model-menu-item,
 .dropdown-item {
     border-radius: 8px;
     cursor: pointer;
@@ -1532,6 +1543,7 @@ button {
 
 .tools-menu-item:hover,
 .template-menu-item:hover,
+.model-menu-item:hover,
 .dropdown-item:hover {
     background: #f5efe7;
 }
@@ -1546,7 +1558,8 @@ button {
     color: #8c7d70;
 }
 
-.mode-selector-btn {
+.mode-selector-btn,
+.model-selector-btn {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -1556,7 +1569,18 @@ button {
     font-size: 13px;
 }
 
-.mode-selector-btn:hover {
+.model-selector-btn {
+    max-width: 160px;
+}
+
+.model-selector-btn span {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.mode-selector-btn:hover,
+.model-selector-btn:hover {
     color: #3b312a;
 }
 
@@ -1566,6 +1590,7 @@ button {
     transition: transform 0.18s;
 }
 
+.model-selector-wrapper.active .dropdown-arrow,
 .mode-selector-wrapper.active .dropdown-arrow {
     transform: rotate(180deg);
 }
@@ -1582,6 +1607,11 @@ button {
     padding: 9px 10px;
 }
 
+.model-menu-item {
+    padding: 9px 10px;
+}
+
+.model-menu-item.active,
 .dropdown-item.active {
     background: var(--orange-soft);
 }
@@ -1729,6 +1759,8 @@ button {
 :root[data-theme="night"] .dropdown-item-main,
 :root[data-theme="night"] .tools-menu-item,
 :root[data-theme="night"] .template-menu-item,
+:root[data-theme="night"] .model-menu-item,
+:root[data-theme="night"] .model-selector-btn,
 :root[data-theme="night"] .mode-selector-btn,
 :root[data-theme="night"] .template-selector-btn,
 :root[data-theme="night"] .message-content,
@@ -1744,6 +1776,7 @@ button {
 :root[data-theme="night"] .input-disclaimer,
 :root[data-theme="night"] .dropdown-header,
 :root[data-theme="night"] .dropdown-item-sub,
+:root[data-theme="night"] .model-selector-btn,
 :root[data-theme="night"] .mode-selector-btn,
 :root[data-theme="night"] .message-time,
 :root[data-theme="night"] .message-input::placeholder {
@@ -1773,6 +1806,7 @@ button {
 :root[data-theme="night"] .user-menu,
 :root[data-theme="night"] .tools-menu,
 :root[data-theme="night"] .template-menu,
+:root[data-theme="night"] .model-dropdown,
 :root[data-theme="night"] .mode-dropdown,
 :root[data-theme="night"] .input-wrapper,
 :root[data-theme="night"] .message-actions {
@@ -1793,6 +1827,8 @@ button {
 :root[data-theme="night"] .history-item:hover,
 :root[data-theme="night"] .tools-menu-item:hover,
 :root[data-theme="night"] .template-menu-item:hover,
+:root[data-theme="night"] .model-menu-item:hover,
+:root[data-theme="night"] .model-selector-btn:hover,
 :root[data-theme="night"] .template-selector-btn:hover,
 :root[data-theme="night"] .template-selector-btn.active,
 :root[data-theme="night"] .dropdown-item:hover,
@@ -1830,6 +1866,7 @@ button {
 }
 
 :root[data-theme="night"] .history-item.active,
+:root[data-theme="night"] .model-menu-item.active,
 :root[data-theme="night"] .dropdown-item.active,
 :root[data-theme="night"] .message-action-btn.active {
     background: var(--orange-soft);
@@ -2425,6 +2462,7 @@ button {
 
     .tools-menu,
     .template-menu,
+    .model-dropdown,
     .mode-dropdown {
         position: fixed;
         left: 12px;
@@ -2495,6 +2533,11 @@ button {
 
     .mode-selector-btn {
         max-width: 50px;
+        overflow: hidden;
+    }
+
+    .model-selector-btn {
+        max-width: 92px;
         overflow: hidden;
     }
 

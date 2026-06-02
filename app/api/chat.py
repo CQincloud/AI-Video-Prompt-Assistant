@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 from uuid import uuid4
 
@@ -23,6 +25,7 @@ from app.models.response import ApiResponse, SessionInfoResponse
 from app.services.auth_service import auth_service
 from app.services.chat_history_service import ChatHistoryError, chat_history_service
 from app.services.image_ai_service import ImageAIError, image_ai_service
+from app.services.model_service import ModelCatalogError, model_service
 from app.services.rag_agent_service import rag_agent_service
 from loguru import logger
 
@@ -79,6 +82,30 @@ def _image_ai_error(exc: ImageAIError) -> JSONResponse:
         status_code=exc.status_code,
         content={"code": exc.status_code, "message": exc.message, "data": None},
     )
+
+
+def _model_error(exc: ModelCatalogError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"code": exc.status_code, "message": exc.message, "data": None},
+    )
+
+
+def _model_metadata(model: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "model": model.get("modelId"),
+        "modelDisplayName": model.get("displayName"),
+        "modelProvider": model.get("provider"),
+    }
+
+
+def _public_model(model: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "modelId": model.get("modelId"),
+        "displayName": model.get("displayName"),
+        "provider": model.get("provider"),
+        "isDefault": bool(model.get("isDefault")),
+    }
 
 
 def _build_compact_model_question(
@@ -181,6 +208,25 @@ def _format_generated_images_markdown(images: list[dict[str, Any]]) -> str:
     for index, image in enumerate(images, start=1):
         lines.append(f"\n![生成图 {index}]({image['url']})")
     return "\n".join(lines)
+
+
+@router.get("/chat/model-options")
+@router.get("/chat/models")
+async def list_chat_models(request: Request):
+    _require_user(request)
+    try:
+        models = model_service.list_available_models()
+        default_model = model_service.default_model()
+    except ModelCatalogError as exc:
+        return _model_error(exc)
+    return {
+        "code": 200,
+        "message": "success",
+        "data": {
+            "models": [_public_model(model) for model in models],
+            "defaultModel": _public_model(default_model),
+        },
+    }
 
 
 @router.get("/chat/sessions")
@@ -445,6 +491,12 @@ async def chat(payload: ChatRequest, request: Request):
     )
 
     try:
+        selected_model = model_service.resolve_chat_model(payload.model)
+    except ModelCatalogError as exc:
+        return _model_error(exc)
+
+    usage_started_at = perf_counter()
+    try:
         logger.info(f"[chat {payload.id}] received non-stream question")
         if not payload.is_retry:
             chat_history_service.append_message(
@@ -452,11 +504,25 @@ async def chat(payload: ChatRequest, request: Request):
                 session_id=payload.id,
                 role="user",
                 content=payload.question,
-                metadata={"mode": "quick"},
+                metadata={"mode": "quick", **_model_metadata(selected_model)},
                 client_message_id=payload.client_message_id,
             )
 
-        answer = await rag_agent_service.query(model_question, session_id=agent_thread_id)
+        answer = await rag_agent_service.query(
+            model_question,
+            session_id=agent_thread_id,
+            model_name=selected_model["modelId"],
+        )
+        duration_ms = int((perf_counter() - usage_started_at) * 1000)
+        model_service.record_usage(
+            user_id=user_id,
+            model=selected_model,
+            session_id=payload.id,
+            mode="quick",
+            prompt_template=payload.prompt_template,
+            success=True,
+            duration_ms=duration_ms,
+        )
         assistant_message = chat_history_service.append_message(
             user_id=user_id,
             session_id=payload.id,
@@ -468,6 +534,7 @@ async def chat(payload: ChatRequest, request: Request):
                 "modelPrompt": model_question,
                 "promptTemplate": payload.prompt_template,
                 "retryOf": payload.retry_of,
+                **_model_metadata(selected_model),
             },
             client_message_id=payload.assistant_message_id,
         )
@@ -481,6 +548,7 @@ async def chat(payload: ChatRequest, request: Request):
                 "sessionId": payload.id,
                 "answer": answer,
                 "assistantMessage": assistant_message,
+                "model": _public_model(selected_model),
                 "errorMessage": None,
             },
         }
@@ -488,6 +556,16 @@ async def chat(payload: ChatRequest, request: Request):
     except ChatHistoryError as exc:
         return _api_error(exc)
     except Exception as exc:
+        model_service.record_usage(
+            user_id=user_id,
+            model=selected_model,
+            session_id=payload.id,
+            mode="quick",
+            prompt_template=payload.prompt_template,
+            success=False,
+            duration_ms=int((perf_counter() - usage_started_at) * 1000),
+            error_message=str(exc),
+        )
         logger.error(f"Chat API error: {exc}")
         return {
             "code": 500,
@@ -512,6 +590,11 @@ async def chat_stream(payload: ChatRequest, request: Request):
     )
 
     try:
+        selected_model = model_service.resolve_chat_model(payload.model)
+    except ModelCatalogError as exc:
+        return _model_error(exc)
+
+    try:
         agent_thread_id = chat_history_service.agent_thread_id(user_id, payload.id)
         if not payload.is_retry:
             chat_history_service.append_message(
@@ -519,7 +602,7 @@ async def chat_stream(payload: ChatRequest, request: Request):
                 session_id=payload.id,
                 role="user",
                 content=payload.question,
-                metadata={"mode": "stream"},
+                metadata={"mode": "stream", **_model_metadata(selected_model)},
                 client_message_id=payload.client_message_id,
             )
     except ChatHistoryError as exc:
@@ -528,6 +611,8 @@ async def chat_stream(payload: ChatRequest, request: Request):
     logger.info(f"[chat {payload.id}] received stream question")
 
     async def event_generator():
+        usage_started_at = perf_counter()
+        usage_recorded = False
         try:
             yield {
                 "event": "message",
@@ -541,6 +626,7 @@ async def chat_stream(payload: ChatRequest, request: Request):
             async for chunk in rag_agent_service.query_stream(
                 model_question,
                 session_id=agent_thread_id,
+                model_name=selected_model["modelId"],
                 emit_auxiliary_events=False,
             ):
                 chunk_type = chunk.get("type", "unknown")
@@ -569,11 +655,23 @@ async def chat_stream(payload: ChatRequest, request: Request):
                             "modelPrompt": model_question,
                             "promptTemplate": payload.prompt_template,
                             "retryOf": payload.retry_of,
+                            **_model_metadata(selected_model),
                         },
                         client_message_id=payload.assistant_message_id,
                     )
+                    model_service.record_usage(
+                        user_id=user_id,
+                        model=selected_model,
+                        session_id=payload.id,
+                        mode="stream",
+                        prompt_template=payload.prompt_template,
+                        success=True,
+                        duration_ms=int((perf_counter() - usage_started_at) * 1000),
+                    )
+                    usage_recorded = True
                     data = dict(chunk_data) if isinstance(chunk_data, dict) else {}
                     data["assistantMessage"] = assistant_message
+                    data["model"] = _public_model(selected_model)
                     yield {
                         "event": "message",
                         "data": json.dumps({"type": "done", "data": data}, ensure_ascii=False),
@@ -589,7 +687,33 @@ async def chat_stream(payload: ChatRequest, request: Request):
 
             logger.info(f"[chat {payload.id}] stream response complete")
 
+        except asyncio.CancelledError:
+            if not usage_recorded:
+                model_service.record_usage(
+                    user_id=user_id,
+                    model=selected_model,
+                    session_id=payload.id,
+                    mode="stream",
+                    prompt_template=payload.prompt_template,
+                    success=False,
+                    duration_ms=int((perf_counter() - usage_started_at) * 1000),
+                    error_message="client disconnected",
+                    metadata={"cancelled": True},
+                )
+            logger.info(f"[chat {payload.id}] stream cancelled by client")
+            raise
         except Exception as exc:
+            if not usage_recorded:
+                model_service.record_usage(
+                    user_id=user_id,
+                    model=selected_model,
+                    session_id=payload.id,
+                    mode="stream",
+                    prompt_template=payload.prompt_template,
+                    success=False,
+                    duration_ms=int((perf_counter() - usage_started_at) * 1000),
+                    error_message=str(exc),
+                )
             logger.error(f"Streaming chat API error: {exc}")
             yield {
                 "event": "message",

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>后台管理 - 炽橙 AI 视频提示词</title>
-    <link rel="stylesheet" href="/static/admin.css?v=202605292002">
+    <link rel="stylesheet" href="/static/admin.css?v=20260602-models3">
 </head>
 <body>
     <div class="admin-shell">
@@ -18,6 +18,7 @@
                     <a class="menu-item menu-link" href="/admin/users" data-view="users">用户管理</a>
                     <a class="menu-item menu-link" href="/admin/kb-files" data-view="kb">知识库文件管理</a>
                     <a class="menu-item menu-link" href="/admin/prompts" data-view="prompts">系统提示词管理</a>
+                    <a class="menu-item menu-link" href="/admin/models" data-view="models">模型管理</a>
                 </nav>
             </div>
             <div class="sidebar-foot">PostgreSQL 管运营数据，Milvus 管向量索引</div>
@@ -258,6 +259,55 @@
                         </div>
                     </section>
                 </section>
+
+                <section id="modelsView" class="admin-view" hidden>
+                    <section class="panel filters">
+                        <label class="field">
+                            <span>关键词</span>
+                            <input id="modelKeywordFilter" type="text" placeholder="搜索名称、模型 ID 或供应商">
+                        </label>
+                        <label class="field">
+                            <span>状态</span>
+                            <select id="modelEnabledFilter">
+                                <option value="">全部</option>
+                                <option value="true">启用中</option>
+                                <option value="false">已停用</option>
+                            </select>
+                        </label>
+                        <button id="modelSearchBtn" class="btn btn-primary" type="button">查询</button>
+                        <button id="modelResetBtn" class="btn btn-secondary" type="button">重置</button>
+                        <button id="modelNewBtn" class="btn btn-primary" type="button">新增模型</button>
+                    </section>
+
+                    <section class="panel table-panel">
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>名称</th>
+                                        <th>模型 ID</th>
+                                        <th>状态</th>
+                                        <th>今日</th>
+                                        <th>本月</th>
+                                        <th>总次数</th>
+                                        <th>失败</th>
+                                        <th>最近使用</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="modelsTbody"></tbody>
+                            </table>
+                        </div>
+                        <div id="modelsEmpty" class="empty" hidden>暂无模型</div>
+                        <div class="pagination">
+                            <span id="modelsPageMeta" class="pagination-meta"></span>
+                            <div class="pagination-buttons">
+                                <button id="modelsPrevBtn" class="btn btn-secondary" type="button">上一页</button>
+                                <button id="modelsNextBtn" class="btn btn-secondary" type="button">下一页</button>
+                            </div>
+                        </div>
+                    </section>
+                </section>
             </main>
         </section>
     </div>
@@ -400,6 +450,48 @@
         </form>
     </dialog>
 
-    <script src="/static/admin-users.js?v=202605291956"></script>
+    <dialog id="modelDialog" class="modal">
+        <div class="modal-header">
+            <h3 id="modelDialogTitle">编辑模型</h3>
+            <button class="btn btn-secondary" data-close-dialog="modelDialog" type="button">关闭</button>
+        </div>
+        <form id="modelForm" class="modal-body">
+            <label class="field">
+                <span>模型名称</span>
+                <input id="modelDisplayName" type="text" maxlength="120" placeholder="通义千问 3.7 Plus">
+            </label>
+            <label class="field">
+                <span>模型 ID</span>
+                <input id="modelId" type="text" maxlength="120" placeholder="qwen3.7-plus">
+            </label>
+            <label class="field">
+                <span>供应商</span>
+                <input id="modelProvider" type="text" maxlength="50" value="dashscope">
+            </label>
+            <label class="field">
+                <span>排序</span>
+                <input id="modelSortOrder" type="number" min="0" max="10000" step="1" value="100">
+            </label>
+            <label class="check-field">
+                <input id="modelEnabled" type="checkbox">
+                <span>启用模型</span>
+            </label>
+            <label class="check-field">
+                <input id="modelDefault" type="checkbox">
+                <span>设为默认模型</span>
+            </label>
+            <label class="field">
+                <span>备注</span>
+                <textarea id="modelRemark" placeholder="用于后台说明，不展示给普通用户"></textarea>
+            </label>
+            <p id="modelMessage" class="message"></p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" data-close-dialog="modelDialog" type="button">取消</button>
+                <button class="btn btn-primary" type="submit">保存</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script src="/static/admin-users.js?v=20260602-models3"></script>
 </body>
 </html>

@@ -14,6 +14,7 @@ class ChatRequest(BaseModel):
     id: str = Field(..., description="会话 ID", alias="Id")
     question: str = Field(..., description="用户问题", alias="Question")
     model_question: str | None = Field(None, description="发送给模型的增强问题", alias="ModelQuestion")
+    model: str | None = Field(None, description="本次对话使用的模型", alias="Model")
     prompt_template: str | None = Field(None, description="提示词模板类型", alias="PromptTemplate")
     client_message_id: str | None = Field(None, alias="ClientMessageId")
     assistant_message_id: str | None = Field(None, alias="AssistantMessageId")
