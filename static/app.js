@@ -34,6 +34,10 @@ class SuperBizAgentApp {
         this.selectedPromptTemplate = null;
         this.availableModels = [];
         this.currentModel = this.loadPreferredModel();
+        this.scriptPromptState = {
+            parsedScript: null,
+            generationType: "character",
+        };
 
         this.initializeElements();
         this.applyTheme(this.theme);
@@ -45,6 +49,8 @@ class SuperBizAgentApp {
         this.loadChatHistoriesFromServer();
         this.loadChatModelsFromServer();
         this.updateUI();
+        this.renderScriptPromptParsed();
+        this.renderScriptPromptTargets();
         this.resizeMessageInput();
         this.checkAndSetCentered();
     }
@@ -97,6 +103,23 @@ class SuperBizAgentApp {
         this.inputWrapper = document.querySelector(".input-wrapper");
         this.chatHistoryList = document.getElementById("chatHistoryList");
         this.loadingOverlay = document.getElementById("loadingOverlay");
+        this.scriptPromptBtn = document.getElementById("scriptPromptBtn");
+        this.scriptPromptOverlay = document.getElementById("scriptPromptOverlay");
+        this.scriptPromptPanel = document.getElementById("scriptPromptPanel");
+        this.scriptPromptCloseBtn = document.getElementById("scriptPromptCloseBtn");
+        this.scriptPromptTitleInput = document.getElementById("scriptPromptTitleInput");
+        this.scriptPromptTextInput = document.getElementById("scriptPromptTextInput");
+        this.scriptPromptFileBtn = document.getElementById("scriptPromptFileBtn");
+        this.scriptPromptFileInput = document.getElementById("scriptPromptFileInput");
+        this.scriptPromptParseBtn = document.getElementById("scriptPromptParseBtn");
+        this.scriptPromptStatus = document.getElementById("scriptPromptStatus");
+        this.scriptPromptStructure = document.getElementById("scriptPromptStructure");
+        this.scriptPromptTypeGrid = document.getElementById("scriptPromptTypeGrid");
+        this.scriptPromptTargetSelect = document.getElementById("scriptPromptTargetSelect");
+        this.scriptPromptPlatformSelect = document.getElementById("scriptPromptPlatformSelect");
+        this.scriptPromptEnglishToggle = document.getElementById("scriptPromptEnglishToggle");
+        this.scriptPromptRequirementInput = document.getElementById("scriptPromptRequirementInput");
+        this.scriptPromptGenerateBtn = document.getElementById("scriptPromptGenerateBtn");
     }
 
     bindEvents() {
@@ -111,6 +134,25 @@ class SuperBizAgentApp {
         });
         this.logoutBtn?.addEventListener("click", () => this.logout());
         this.creationDiagnosisBtn?.addEventListener("click", () => this.triggerCreationDiagnosis());
+        this.scriptPromptBtn?.addEventListener("click", () => this.openScriptPromptPanel());
+        this.scriptPromptOverlay?.addEventListener("click", () => this.closeScriptPromptPanel());
+        this.scriptPromptCloseBtn?.addEventListener("click", () => this.closeScriptPromptPanel());
+        this.scriptPromptFileBtn?.addEventListener("click", () => this.scriptPromptFileInput?.click());
+        this.scriptPromptFileInput?.addEventListener("change", (event) => this.handleScriptPromptFileSelect(event));
+        this.scriptPromptTitleInput?.addEventListener("input", () => this.invalidateScriptPromptParse());
+        this.scriptPromptTextInput?.addEventListener("input", () => this.invalidateScriptPromptParse());
+        this.scriptPromptParseBtn?.addEventListener("click", () => this.parseScriptPrompt());
+        this.scriptPromptGenerateBtn?.addEventListener("click", () => this.generateScriptPrompt());
+        this.scriptPromptTypeGrid?.addEventListener("click", (event) => {
+            const item = event.target.closest(".script-prompt-type");
+            if (!item) return;
+            this.selectScriptPromptType(item.dataset.type || "character");
+        });
+        this.scriptPromptStructure?.addEventListener("click", (event) => {
+            const item = event.target.closest("[data-script-target]");
+            if (!item) return;
+            this.selectScriptPromptTarget(item.dataset.targetType || "character", item.dataset.scriptTarget || "");
+        });
         this.userAvatarBtn?.addEventListener("click", (event) => {
             event.stopPropagation();
             this.userAvatarBtn.closest(".user-menu-wrapper")?.classList.toggle("active");
@@ -244,6 +286,7 @@ class SuperBizAgentApp {
                 this.closeModeDropdown();
                 this.closeTemplateMenu();
                 this.closeUserMenu();
+                this.closeScriptPromptPanel();
             }
         });
     }
@@ -254,57 +297,448 @@ class SuperBizAgentApp {
                 label: "角色生成",
                 placeholder: "输入角色想法，例如：一个古风女杀手，外冷内热，曾是宫廷暗卫…",
                 runtimeInstruction: `任务类型：角色生成 / 人物设定 / 角色三视图
-用户原始内容：
+原始需求：
 {{input}}
 
-请按后端角色生成规则输出。保留用户指定画风；未指定画风时默认真人写实风格。`,
+请按角色生成模板输出，必须包含人物三视图设定卡要求。保留用户指定画风；未指定画风时默认真人写实风格。`,
             },
             scene: {
                 label: "场景提示词",
                 placeholder: "输入场景想法，例如：雨夜皇宫内殿，女主发现密信…",
                 runtimeInstruction: `任务类型：场景提示词
-用户原始内容：
+原始需求：
 {{input}}
 
-请按后端场景画面规则输出，聚焦空间、光影、氛围、构图和影像风格。`,
+请按场景画面模板输出，聚焦空间、光影、氛围、构图和影像风格。`,
             },
             expression: {
                 label: "表情语气",
                 placeholder: "输入角色情绪或台词，例如：她明明生气却强装平静…",
                 runtimeInstruction: `任务类型：表情语气模板
-用户原始内容：
+原始需求：
 {{input}}
 
-请按后端表情语气规则输出，只聚焦脸部表情、眼神和声音/台词语气。`,
+请按表情语气模板输出，只聚焦脸部表情、眼神和声音/台词语气。`,
             },
             storyboard: {
                 label: "分镜脚本",
                 placeholder: "输入剧情段落，例如：女主雨夜闯宫门质问师兄…",
                 runtimeInstruction: `任务类型：分镜脚本 / 镜头表格
-用户原始内容：
+原始需求：
 {{input}}
 
-请按后端分镜规则输出连续镜头，包含镜号、景别、镜头角度/运动和画面提示词。`,
+请按分镜脚本模板输出连续镜头，包含镜号、景别、镜头角度/运动和画面提示词。`,
             },
             action: {
                 label: "动作提示词",
                 placeholder: "输入动作，例如：角色压抑情绪后突然拔剑…",
                 runtimeInstruction: `任务类型：动作拆解 / 动作提示词
-用户原始内容：
+原始需求：
 {{input}}
 
-请按后端动作规则输出，聚焦起始姿态、动作过程、力量方向、节奏和镜头建议。`,
+请按动作提示词模板输出，聚焦起始姿态、动作过程、力量方向、节奏和镜头建议。`,
             },
             plot: {
                 label: "剧情提示词",
                 placeholder: "输入剧情想法，例如：主角误以为师兄背叛宗门…",
                 runtimeInstruction: `任务类型：剧情策划 / 剧情结构
-用户原始内容：
+原始需求：
 {{input}}
 
-请按后端剧情规则输出剧情核心、人物关系、冲突推进、情绪弧线和结尾钩子；不要默认拆分镜。`,
+请按剧情提示词模板输出剧情核心、人物关系、冲突推进、情绪弧线和结尾钩子；不要默认拆分镜。`,
             },
         };
+    }
+
+    openScriptPromptPanel() {
+        if (!this.scriptPromptPanel || !this.scriptPromptOverlay) return;
+        this.scriptPromptPanel.hidden = false;
+        this.scriptPromptOverlay.hidden = false;
+        document.body.classList.add("script-prompt-open");
+        this.scriptPromptTextInput?.focus();
+        this.renderScriptPromptTargets();
+    }
+
+    closeScriptPromptPanel() {
+        if (!this.scriptPromptPanel || !this.scriptPromptOverlay) return;
+        this.scriptPromptPanel.hidden = true;
+        this.scriptPromptOverlay.hidden = true;
+        document.body.classList.remove("script-prompt-open");
+    }
+
+    async handleScriptPromptFileSelect(event) {
+        const file = event.target.files?.[0];
+        if (!file) return;
+        if (!/\.(txt|md|markdown)$/i.test(file.name)) {
+            this.showNotification("剧本文件仅支持 TXT 或 Markdown", "warning");
+            event.target.value = "";
+            return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+            this.showNotification("第一版单个剧本文件请控制在 2MB 以内", "warning");
+            event.target.value = "";
+            return;
+        }
+        try {
+            const text = await file.text();
+            if (this.scriptPromptTextInput) this.scriptPromptTextInput.value = text;
+            if (this.scriptPromptTitleInput && !this.scriptPromptTitleInput.value.trim()) {
+                this.scriptPromptTitleInput.value = file.name.replace(/\.(txt|md|markdown)$/i, "");
+            }
+            this.invalidateScriptPromptParse("剧本已读取，请点击解析剧本");
+            this.showNotification("剧本已读取", "success");
+        } catch (error) {
+            this.showNotification("读取剧本文件失败", "error");
+        } finally {
+            event.target.value = "";
+        }
+    }
+
+    async parseScriptPrompt() {
+        const scriptText = this.scriptPromptTextInput?.value.trim() || "";
+        const title = this.scriptPromptTitleInput?.value.trim() || "";
+        if (!scriptText) {
+            this.showNotification("请先粘贴剧本内容", "warning");
+            return;
+        }
+        this.setScriptPromptBusy(true, "正在解析剧本...");
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/script-prompts/parse`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    scriptText,
+                    title,
+                }),
+            });
+            const result = await this.readJsonResponse(response);
+            this.scriptPromptState.parsedScript = result.data?.script || null;
+            this.renderScriptPromptParsed();
+            this.renderScriptPromptTargets();
+            this.showNotification("剧本解析完成", "success");
+        } catch (error) {
+            this.showNotification(error.message || "剧本解析失败", "error");
+            if (this.scriptPromptStatus) this.scriptPromptStatus.textContent = "解析失败";
+        } finally {
+            this.setScriptPromptBusy(false);
+        }
+    }
+
+    setScriptPromptBusy(isBusy, statusText = "") {
+        if (this.scriptPromptParseBtn) this.scriptPromptParseBtn.disabled = isBusy;
+        if (this.scriptPromptGenerateBtn) {
+            this.scriptPromptGenerateBtn.disabled = isBusy || !this.scriptPromptState.parsedScript;
+        }
+        if (this.scriptPromptStatus && statusText) this.scriptPromptStatus.textContent = statusText;
+    }
+
+    invalidateScriptPromptParse(statusText = "剧本内容已修改，请重新解析") {
+        if (!this.scriptPromptState.parsedScript) return;
+        this.scriptPromptState.parsedScript = null;
+        this.renderScriptPromptParsed(statusText);
+        this.renderScriptPromptTargets();
+    }
+
+    renderScriptPromptParsed(emptyStatusText = "尚未解析剧本") {
+        const script = this.scriptPromptState.parsedScript;
+        if (!this.scriptPromptStructure || !this.scriptPromptStatus) return;
+        if (!script) {
+            this.scriptPromptStatus.textContent = emptyStatusText;
+            this.scriptPromptStructure.innerHTML = `
+                <div class="script-prompt-empty-state">
+                    <strong>解析后在这里查看人物和场景</strong>
+                    <span>左侧粘贴或上传剧本，点击“解析剧本”后，可直接点选人物或场景联动右侧生成设置。</span>
+                </div>
+            `;
+            return;
+        }
+
+        const stats = script.stats || {};
+        this.scriptPromptStatus.textContent =
+            `《${script.title || "未命名剧本"}》已识别 ${stats.character_count || 0} 个角色、` +
+            `${stats.scene_count || 0} 个场景、${stats.chunk_count || 0} 个引用片段`;
+
+        const characters = (script.characters || []).map((character) => `
+            <button type="button" class="script-prompt-chip" data-target-type="character" data-script-target="${this.escapeHtml(character.name)}">
+                <span>${this.escapeHtml(character.name)}</span>
+            </button>
+        `).join("");
+        const scenes = (script.scenes || []).map((scene) => `
+            <button type="button" class="script-prompt-structure-item" data-target-type="scene" data-script-target="${this.escapeHtml(scene.scene_number || scene.location || "")}">
+                <span>${this.escapeHtml(scene.scene_number || "场景")}</span>
+                <small>${this.escapeHtml([scene.location, scene.time].filter(Boolean).join(" / "))}</small>
+            </button>
+        `).join("");
+
+        this.scriptPromptStructure.innerHTML = `
+            <div class="script-prompt-stats">
+                <span>角色 ${stats.character_count || 0}</span>
+                <span>场景 ${stats.scene_count || 0}</span>
+                <span>片段 ${stats.chunk_count || 0}</span>
+            </div>
+            <div class="script-prompt-structure-section">
+                <h3>人物</h3>
+                <div class="script-prompt-chip-row">${characters || "<span class='script-prompt-muted'>未识别到人物表</span>"}</div>
+            </div>
+            <div class="script-prompt-structure-section">
+                <h3>场景</h3>
+                <div class="script-prompt-scene-list">${scenes || "<span class='script-prompt-muted'>未识别到场景标题</span>"}</div>
+            </div>
+        `;
+    }
+
+    selectScriptPromptType(type) {
+        const allowedTypes = ["character", "scene", "storyboard", "action", "plot"];
+        this.scriptPromptState.generationType = allowedTypes.includes(type) ? type : "character";
+        this.scriptPromptTypeGrid?.querySelectorAll(".script-prompt-type").forEach((item) => {
+            item.classList.toggle("active", item.dataset.type === this.scriptPromptState.generationType);
+        });
+        this.renderScriptPromptTargets();
+    }
+
+    selectScriptPromptTarget(type, target) {
+        if (type === "character") {
+            this.selectScriptPromptType("character");
+        } else if (type === "scene" && !["scene", "storyboard", "action"].includes(this.scriptPromptState.generationType)) {
+            this.selectScriptPromptType("scene");
+        }
+        this.renderScriptPromptTargets(target);
+        const typeLabel = this.getScriptPromptTypeLabel(this.scriptPromptState.generationType);
+        if (this.scriptPromptRequirementInput && !this.scriptPromptRequirementInput.value.trim()) {
+            this.scriptPromptRequirementInput.value = `生成${target}的${typeLabel}，真人写实电影感，适合 AI 短剧。`;
+        }
+        this.scriptPromptRequirementInput?.focus();
+    }
+
+    renderScriptPromptTargets(preferredTarget = "") {
+        if (!this.scriptPromptTargetSelect) return;
+        const script = this.scriptPromptState.parsedScript;
+        const type = this.scriptPromptState.generationType;
+        const options = this.getScriptPromptTargetOptions(script, type);
+        const current = preferredTarget || this.scriptPromptTargetSelect.value;
+        this.scriptPromptTargetSelect.innerHTML = options.map((option) => `
+            <option value="${this.escapeHtml(option.value)}">${this.escapeHtml(option.label)}</option>
+        `).join("");
+        const matched = options.find((option) => option.value === current);
+        this.scriptPromptTargetSelect.value = matched?.value || options[0]?.value || "";
+        if (this.scriptPromptGenerateBtn) {
+            this.scriptPromptGenerateBtn.disabled = !script || !this.scriptPromptTargetSelect.value;
+        }
+    }
+
+    getScriptPromptTargetOptions(script, type) {
+        if (!script) {
+            return [{ value: "", label: "请先解析剧本" }];
+        }
+        if (type === "character") {
+            const characters = script.characters || [];
+            return characters.length
+                ? characters.map((character) => ({ value: character.name, label: character.name }))
+                : [{ value: "", label: "未识别到角色" }];
+        }
+        if (["scene", "storyboard", "action"].includes(type)) {
+            const scenes = script.scenes || [];
+            return scenes.length
+                ? scenes.map((scene) => ({
+                    value: scene.scene_number || scene.location,
+                    label: [scene.scene_number, scene.location, scene.time].filter(Boolean).join(" / "),
+                }))
+                : [{ value: "", label: "未识别到场景" }];
+        }
+        if (type === "plot") {
+            return [{ value: script.title || "整部剧", label: `整部剧：${script.title || "当前剧本"}` }];
+        }
+        return [{ value: script.title || "当前剧本", label: script.title || "当前剧本" }];
+    }
+
+    async generateScriptPrompt() {
+        if (this.isStreaming) {
+            this.showNotification("请等待当前回答完成", "warning");
+            return;
+        }
+        const parsedScript = this.scriptPromptState.parsedScript;
+        if (!parsedScript) {
+            this.showNotification("请先解析剧本", "warning");
+            return;
+        }
+        const target = this.scriptPromptTargetSelect?.value || "";
+        const userRequirement = this.scriptPromptRequirementInput?.value.trim() || "";
+        const generationType = this.scriptPromptState.generationType;
+        const promptTemplate = this.getScriptPromptTemplateForType(generationType);
+        if (!promptTemplate) {
+            this.showNotification("当前类型没有对应的系统提示词模板", "warning");
+            return;
+        }
+        this.setScriptPromptBusy(true, "正在整理剧本引用...");
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/script-prompts/references`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({
+                    parsedScript,
+                    generationType,
+                    target,
+                    platform: this.scriptPromptPlatformSelect?.value || "general",
+                    userRequirement,
+                    includeEnglish: Boolean(this.scriptPromptEnglishToggle?.checked),
+                }),
+            });
+            const result = await this.readJsonResponse(response);
+            const referenceData = result.data || null;
+            const displayQuestion = this.buildScriptPromptDisplayQuestion(referenceData, userRequirement);
+            const modelQuestion = this.buildScriptPromptModelQuestion(referenceData, userRequirement);
+            this.closeScriptPromptPanel();
+            await this.startScriptPromptChat(displayQuestion, promptTemplate, modelQuestion);
+            this.showNotification("已在对话区生成提示词", "success");
+        } catch (error) {
+            this.showNotification(error.message || "剧本提示词生成失败", "error");
+        } finally {
+            this.setScriptPromptBusy(false, parsedScript ? `《${parsedScript.title || "当前剧本"}》已解析` : "");
+        }
+    }
+
+    getScriptPromptTypeLabel(type) {
+        const labels = {
+            character: "人物提示词",
+            scene: "场景提示词",
+            storyboard: "分镜提示词",
+            action: "动作提示词",
+            plot: "剧情提示词",
+        };
+        return labels[type] || "提示词";
+    }
+
+    getScriptPromptTemplateForType(type) {
+        const mapping = {
+            character: "character",
+            scene: "scene",
+            storyboard: "storyboard",
+            action: "action",
+            plot: "plot",
+        };
+        return mapping[type] || "";
+    }
+
+    buildScriptPromptDisplayQuestion(data, userRequirement = "") {
+        const scriptTitle = data?.script?.title || this.scriptPromptState.parsedScript?.title || "当前剧本";
+        const generationType = data?.generationType || this.scriptPromptState.generationType;
+        const target = data?.target || this.scriptPromptTargetSelect?.value || scriptTitle;
+        const platform = this.getScriptPromptPlatformLabel(data?.platform || this.scriptPromptPlatformSelect?.value || "general");
+        const typeLabel = this.getScriptPromptTypeLabel(generationType);
+        const includeEnglish = Boolean(data?.includeEnglish || this.scriptPromptEnglishToggle?.checked);
+        const lines = [
+            `基于剧本《${scriptTitle}》，生成${target ? `「${target}」的` : ""}${typeLabel}。`,
+            `平台用途：${platform}`,
+        ];
+        if (userRequirement) lines.push(`补充需求：${userRequirement}`);
+        if (includeEnglish) lines.push("同时生成英文版。");
+        return lines.join("\n");
+    }
+
+    buildScriptPromptModelQuestion(data, userRequirement = "") {
+        const scriptTitle = data?.script?.title || this.scriptPromptState.parsedScript?.title || "当前剧本";
+        const generationType = data?.generationType || this.scriptPromptState.generationType;
+        const target = data?.target || this.scriptPromptTargetSelect?.value || scriptTitle;
+        const platform = this.getScriptPromptPlatformLabel(data?.platform || this.scriptPromptPlatformSelect?.value || "general");
+        const typeLabel = this.getScriptPromptTypeLabel(generationType);
+        const templateLabel = this.promptTemplates[this.getScriptPromptTemplateForType(generationType)]?.label || typeLabel;
+        const includeEnglish = Boolean(data?.includeEnglish || this.scriptPromptEnglishToggle?.checked);
+        const references = data?.references || [];
+        const referenceText = references.map((reference, index) => [
+            `引用 ${index + 1}`,
+            `chunk_id：${reference.chunk_id || ""}`,
+            `来源：${reference.source || ""}`,
+            `原文：${reference.quote || ""}`,
+            `用途：${reference.usage || ""}`,
+        ].join("\n")).join("\n\n");
+
+        return [
+            "【剧本引用提示词生成任务】",
+            `请基于剧本《${scriptTitle}》生成${target ? `「${target}」的` : ""}${typeLabel}。`,
+            `请按当前选择的「${templateLabel}」创作模板输出，不要另起自由格式。`,
+            `平台用途：${platform}`,
+            `英文版：${includeEnglish ? "需要生成" : "不需要，除非我后续明确要求"}`,
+            `补充需求：${userRequirement || "保持剧本设定，适合 AI 漫剧 / AI 短剧生产。"}`,
+            "输出要求：",
+            ...(generationType === "character" ? [
+                "0. 这是人物/角色提示词任务，必须输出人物三视图设定卡，包含正视图、侧视图、后视图的一致性要求。",
+            ] : []),
+            "1. 负面提示词必须保留。",
+            "2. 引用依据只能使用下面的剧本片段，不要编造剧本原文。",
+            "3. 剧本没有直接写明但为了视觉化需要补充的内容，必须标为合理推断。",
+            "4. 最终提示词要方便直接使用。",
+            "【剧本引用片段】",
+            referenceText || "暂无可用引用片段。",
+        ].join("\n");
+    }
+
+    getScriptPromptPlatformLabel(value) {
+        const labels = {
+            general: "通用",
+            midjourney: "Midjourney",
+            stable_diffusion: "Stable Diffusion",
+            jimeng: "即梦",
+            kling: "可灵",
+            runway: "Runway",
+            pika: "Pika",
+        };
+        return labels[value] || value || "通用";
+    }
+
+    async startScriptPromptChat(displayQuestion, promptTemplate, modelQuestion = displayQuestion) {
+        if (!["quick", "stream"].includes(this.currentMode)) {
+            this.selectMode("stream");
+        }
+        const selectedModel = this.getCurrentModel();
+        const userMessage = this.addMessage("user", displayQuestion, true, false, {
+            model: selectedModel,
+            promptTemplate,
+        });
+        if (this.messageInput) this.messageInput.value = "";
+        this.resizeMessageInput();
+        this.isStreaming = true;
+        this.stopRequested = false;
+        this.updateUI();
+
+        const assistantMetadata = {
+            id: this.generateMessageId(),
+            prompt: displayQuestion,
+            modelPrompt: modelQuestion,
+            model: selectedModel,
+            promptTemplate,
+            userMessageId: userMessage.dataset.messageId,
+        };
+        const assistantMessage = this.addMessage(
+            "assistant",
+            "火宝正在按照剧本引用和系统模板生成...",
+            false,
+            true,
+            assistantMetadata
+        );
+
+        try {
+            if (this.currentMode === "quick") {
+                await this.sendQuickMessage(displayQuestion, assistantMessage, assistantMetadata);
+            } else {
+                await this.sendStreamMessage(displayQuestion, assistantMessage, assistantMetadata);
+            }
+        } catch (error) {
+            if (this.stopRequested || error.name === "AbortError") {
+                this.updateMessage(assistantMessage, "已停止生成");
+            } else {
+                this.updateMessage(assistantMessage, `抱歉，处理时出现错误：${error.message}`);
+                throw error;
+            }
+        } finally {
+            this.activeAbortController = null;
+            this.activeTypewriter = null;
+            this.isStreaming = false;
+            this.stopRequested = false;
+            this.updateUI();
+            this.saveCurrentChat();
+        }
     }
 
     selectPromptTemplate(templateKey) {

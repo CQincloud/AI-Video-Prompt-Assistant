@@ -1280,13 +1280,21 @@ class RagAgentService:
         )
 
         has_secret = any(term in normalized for term in secret_terms)
+        asks_to_disclose = any(action in normalized for action in disclosure_actions)
+        if has_secret and asks_to_disclose:
+            return "secret_disclosure"
+
+        classification_text = q
+        if "【剧本引用提示词生成任务】" in classification_text:
+            classification_text = classification_text.split("【剧本引用片段】", 1)[0]
+            classification_text = classification_text.replace("原始需求：", "")
+        normalized = classification_text.lower()
+
         has_pii = any(term in normalized for term in pii_terms)
         asks_to_disclose = any(action in normalized for action in disclosure_actions)
         targets_other_or_bulk = any(subject in normalized for subject in protected_subjects)
         asks_for_safe_guidance = any(term in normalized for term in safe_guidance_terms)
 
-        if has_secret and asks_to_disclose:
-            return "secret_disclosure"
         if has_pii and (targets_other_or_bulk or asks_to_disclose):
             return "pii_disclosure"
         if targets_other_or_bulk and asks_to_disclose and any(

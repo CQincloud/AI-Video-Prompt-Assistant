@@ -38,27 +38,27 @@ UPLOAD_READ_CHUNK_SIZE = 1024 * 1024
 COMPACT_PROMPT_TEMPLATE_INSTRUCTIONS = {
     "character": (
         "任务类型：角色生成 / 人物设定 / 角色三视图\n"
-        "请按后端角色生成规则输出。保留用户指定画风；未指定画风时默认真人写实风格。"
+        "请按角色生成模板输出，必须包含人物三视图设定卡要求；保留用户指定画风，未指定画风时默认真人写实风格。"
     ),
     "scene": (
         "任务类型：场景提示词\n"
-        "请按后端场景画面规则输出，聚焦空间、光影、氛围、构图和影像风格。"
+        "请按场景画面模板输出，聚焦空间、光影、氛围、构图和影像风格。"
     ),
     "expression": (
         "任务类型：表情语气模板\n"
-        "请按后端表情语气规则输出，只聚焦脸部表情、眼神和声音/台词语气。"
+        "请按表情语气模板输出，只聚焦脸部表情、眼神和声音/台词语气。"
     ),
     "storyboard": (
         "任务类型：分镜脚本 / 镜头表格\n"
-        "请按后端分镜规则输出连续镜头，包含镜号、景别、镜头角度/运动和画面提示词。"
+        "请按分镜脚本模板输出连续镜头，包含镜号、景别、镜头角度/运动和画面提示词。"
     ),
     "action": (
         "任务类型：动作拆解 / 动作提示词\n"
-        "请按后端动作规则输出，聚焦起始姿态、动作过程、力量方向、节奏和镜头建议。"
+        "请按动作提示词模板输出，聚焦起始姿态、动作过程、力量方向、节奏和镜头建议。"
     ),
     "plot": (
         "任务类型：剧情策划 / 剧情结构\n"
-        "请按后端剧情规则输出剧情核心、人物关系、冲突推进、情绪弧线和结尾钩子；不要默认拆分镜。"
+        "请按剧情提示词模板输出剧情核心、人物关系、冲突推进、情绪弧线和结尾钩子；不要默认拆分镜。"
     ),
 }
 
@@ -120,7 +120,10 @@ def _build_compact_model_question(
     instruction = COMPACT_PROMPT_TEMPLATE_INSTRUCTIONS.get(template_key)
     if not instruction:
         return (fallback_model_question or question).strip()
-    return f"{instruction}\n\n用户原始内容：\n{clean_question}"
+    fallback_question = (fallback_model_question or "").strip()
+    if fallback_question.startswith("【剧本引用提示词生成任务】"):
+        clean_question = fallback_question
+    return f"{instruction}\n\n原始需求：\n{clean_question}"
 
 
 async def _read_image_uploads(files: list[UploadFile]) -> list[dict[str, Any]]:

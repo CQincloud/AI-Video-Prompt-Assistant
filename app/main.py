@@ -21,6 +21,7 @@ from app.api import (
     chat,
     file,
     health,
+    script_prompts,
 )
 from app.config import config
 from app.core.database import close_connection_pool, init_connection_pool
@@ -211,6 +212,7 @@ app.include_router(admin_prompts.router, prefix="/api/admin", tags=["后台提�
 app.include_router(admin_models.router, prefix="/api/admin", tags=["后台模型管理"])
 app.include_router(chat.router, prefix="/api", tags=["对话"])
 app.include_router(file.router, prefix="/api", tags=["文件管理"])
+app.include_router(script_prompts.router, prefix="/api", tags=["剧本提示词"])
 app.include_router(aiops.router, prefix="/api", tags=["AIOps智能运维"])
 
 static_dir = "static"
