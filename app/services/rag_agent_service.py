@@ -1134,61 +1134,39 @@ class RagAgentService:
 
     def _is_model_identity_request(self, question: str) -> bool:
         """识别用户询问当前 AI/模型配置的请求，避免让模型自行猜测。"""
-        q = question.strip().lower()
+        q = re.sub(r"\s+", "", (question or "").strip().lower())
         if not q:
             return False
 
-        explicit_config_terms = (
-            "rag_model",
-            "dashscope_model",
-            "dasHSCOPE_MODEL".lower(),
-            "当前模型配置",
-            "模型配置",
-        )
-        if any(term in q for term in explicit_config_terms):
+        explicit_questions = {
+            "你用的是什么模型",
+            "你现在用的是什么模型",
+            "你当前用的是什么模型",
+            "你正在用的是什么模型",
+            "当前用的是什么模型",
+            "现在用的是什么模型",
+            "当前模型是什么",
+            "当前请求模型是什么",
+            "你是什么模型",
+            "你调用的是什么模型",
+            "你调用的是哪个模型",
+            "当前rag_model是什么",
+            "rag_model是什么",
+            "当前dashscope_model是什么",
+            "dashscope_model是什么",
+            "rag模型是什么",
+            "dashscope模型是什么",
+        }
+        if q.rstrip("？?。") in explicit_questions:
             return True
 
-        model_terms = ("模型", "大模型", "model")
-        ask_terms = (
-            "你用",
-            "你是用",
-            "你现在用",
-            "你正在用",
-            "当前用",
-            "当前使用",
-            "现在使用",
-            "正在用",
-            "使用的",
-            "使用的是",
-            "用的是",
-            "是什么",
-            "哪个",
-            "哪一个",
-            "什么",
-            "啥",
+        explicit_patterns = (
+            r"^(?:你|你现在|你当前|当前|现在)?(?:使用|用|调用)的?(?:是)?(?:什么|哪个|哪一个)(?:ai|大模型|模型|model)[？?。]?$",
+            r"^(?:你|你现在|你当前|当前|现在)?(?:ai|大模型|模型|model)(?:是)?(?:什么|哪个|哪一个)[？?。]?$",
+            r"^(?:当前|现在)?(?:rag_model|dashscope_model)(?:是)?(?:什么|多少|哪个)[？?。]?$",
+            r"^(?:当前|现在)?(?:rag|dashscope)(?:模型|model)(?:是)?(?:什么|多少|哪个)[？?。]?$",
         )
-        if any(term in q for term in model_terms) and any(term in q for term in ask_terms):
-            return True
-
-        ai_identity_patterns = (
-            "什么ai",
-            "什么 ai",
-            "哪个ai",
-            "哪个 ai",
-            "哪一个ai",
-            "哪一个 ai",
-            "用的ai",
-            "用的 ai",
-            "用的是ai",
-            "用的是 ai",
-            "使用的ai",
-            "使用的 ai",
-            "使用的是ai",
-            "使用的是 ai",
-            "ai模型",
-            "ai model",
-        )
-        return any(pattern in q for pattern in ai_identity_patterns)
+        return any(re.fullmatch(pattern, q, flags=re.IGNORECASE) for pattern in explicit_patterns)
 
     def _build_model_identity_answer(self, model_name: str | None = None) -> str:
         active_model = self._normalize_model_name(model_name)
@@ -1489,6 +1467,12 @@ class RagAgentService:
             extra_contracts.append(
                 "- 人物/三视图：单张纯白人物卡；左 1/3 超大正脸，右 2/3 正/侧/后完整全身；自然站姿、无动作表情、无道具背景、无裁切。"
                 "先写记忆点和视觉锚点；不要输出旧模板板块。"
+                "必须把「人设记忆点」写入最终正向提示词；记忆点来自剧本依据或合理推断，并转化为外貌、眼神、发型、气质或姿态方向。"
+                "主要角色须符合 AI 真人短剧大众审美：自然耐看、五官协调、镜头友好、有辨识度；避免网红脸、整容感、模板脸、畸形怪脸。"
+                "外貌只写可见方向，不强行编过细五官参数；剧本未写时不要把皮肤、鼻梁、唇形等写成确定事实。"
+                "服装先判断人物主要身份；只跟随剧本年代、主要身份/职业、阶层和处境；副业、技能、兴趣、隐藏身份、人物关系或剧情功能不得自动转化为服装元素。"
+                "剧本未明确服装细节时，只写“符合某年代某主要身份的服装”，不要自行细化颜色、面料、鞋履、外套或配饰。"
+                "只有剧本明确写出的职业制服或身份标识才保留；三视图可禁止手持道具和背景，但不得删除明确身份服装元素。"
                 "负面词排除文字水印、缺脚、视图不全、脸/发型/服装不一致、道具武器、背景、夸张动作表情。"
                 f"{skin_rule}\n"
             )
@@ -1498,7 +1482,11 @@ class RagAgentService:
             )
         if is_scene_prompt:
             extra_contracts.append(
-                "- 场景画面：色调可作为文字方案；除非用户要求，不让画面出现色卡块或文字说明。\n"
+                "- 场景画面：只生成空环境画面，正向提示词不得出现任何人物、角色、行人、人群、人体、背影、剪影、手部、面部、演员或模特。"
+                "人物、职业、动作和对话只能用于推断地点功能、环境状态和痕迹；例如门半开、卷宗散落、雨水脚印、灯火未熄，不得让人物入画。"
+                "不得写人物外貌、服装、表情、站位、动作、关系或对话内容。"
+                "负面词必须排除人物、角色、行人、人群、背影、人体、脸、手、脚、剪影、演员、模特、站立人物、走动人物、文字和水印。"
+                "色调可作为文字方案；除非用户要求，不让画面出现色卡块或文字说明。\n"
             )
 
         prompt = (
