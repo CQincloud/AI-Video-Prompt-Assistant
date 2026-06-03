@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>炬成 AI 视频提示词助手</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260602-scriptprompt3">
+    <link rel="stylesheet" href="/static/styles.css?v=20260603-visual-constraints">
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
@@ -127,12 +127,6 @@
                         <button type="button" class="quick-prompt-card" data-template="storyboard">
                             <span>分镜脚本</span>
                         </button>
-                        <button type="button" class="quick-prompt-card" data-template="action">
-                            <span>动作提示词</span>
-                        </button>
-                        <button type="button" class="quick-prompt-card" data-template="plot">
-                            <span>剧情提示词</span>
-                        </button>
                     </div>
                 </div>
 
@@ -188,8 +182,6 @@
                                             <div class="template-menu-item" data-template="scene">场景提示词</div>
                                             <div class="template-menu-item" data-template="expression">表情语气</div>
                                             <div class="template-menu-item" data-template="storyboard">分镜脚本</div>
-                                            <div class="template-menu-item" data-template="action">动作提示词</div>
-                                            <div class="template-menu-item" data-template="plot">剧情提示词</div>
                                             <div class="template-menu-divider"></div>
                                             <div class="template-menu-item" data-template-clear="true">普通输入</div>
                                         </div>
@@ -287,8 +279,8 @@
                 <div class="script-prompt-column-title">上传剧本</div>
                 <div class="script-prompt-upload-row">
                     <input type="text" id="scriptPromptTitleInput" class="script-prompt-input" placeholder="剧本名称，可不填">
-                    <button type="button" class="script-prompt-ghost-btn" id="scriptPromptFileBtn">上传文本</button>
-                    <input type="file" id="scriptPromptFileInput" accept=".txt,.md,.markdown" hidden>
+                    <button type="button" class="script-prompt-ghost-btn" id="scriptPromptFileBtn">上传文档</button>
+                    <input type="file" id="scriptPromptFileInput" accept=".txt,.md,.markdown,.docx,.pdf" hidden>
                 </div>
                 <textarea id="scriptPromptTextInput" class="script-prompt-textarea" placeholder="粘贴剧本内容"></textarea>
                 <button type="button" class="script-prompt-primary-btn" id="scriptPromptParseBtn">解析剧本</button>
@@ -305,9 +297,6 @@
                 <div class="script-prompt-type-grid" id="scriptPromptTypeGrid">
                     <button type="button" class="script-prompt-type active" data-type="character">人物</button>
                     <button type="button" class="script-prompt-type" data-type="scene">场景</button>
-                    <button type="button" class="script-prompt-type" data-type="storyboard">分镜</button>
-                    <button type="button" class="script-prompt-type" data-type="action">动作</button>
-                    <button type="button" class="script-prompt-type" data-type="plot">剧情</button>
                 </div>
                 <label class="script-prompt-label" for="scriptPromptTargetSelect">目标对象</label>
                 <select id="scriptPromptTargetSelect" class="script-prompt-select"></select>
@@ -341,6 +330,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=20260602-scriptprompt3"></script>
+    <script src="/static/app.js?v=20260603-visual-constraints"></script>
 </body>
 </html>

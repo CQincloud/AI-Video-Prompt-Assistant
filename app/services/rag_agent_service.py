@@ -564,6 +564,21 @@ class RagAgentService:
 
     def _infer_direct_target_files(self, question: str) -> list[str]:
         """根据用户明示关键词补充直达知识文件，避免目录召回偏航。"""
+        explicit_template = self._explicit_prompt_template(question)
+        if explicit_template == "character":
+            return [
+                "ai_video_character_design_chunks.md",
+                "ai_manga_character_three_view_prompt_chunks.md",
+            ]
+        if explicit_template == "scene":
+            return ["ai_manga_image_scene_prompt_chunks.md"]
+        if explicit_template == "expression":
+            return ["ai_manga_expression_voice_prompt_chunks.md"]
+        if explicit_template == "storyboard":
+            return ["ai_video_script_structure_chunks.md"]
+        if explicit_template == "plot":
+            return ["ai_video_script_structure_chunks.md"]
+
         rules = [
             (
                 "ai_video_action_naturalization_chunks.md",
@@ -707,7 +722,25 @@ class RagAgentService:
         values = ", ".join(f'"{file_name}"' for file_name in escaped_files)
         return f'metadata["_file_name"] in [{values}]'
 
+    def _explicit_prompt_template(self, question: str) -> str | None:
+        """Detect a template explicitly selected by the UI before heuristic routing."""
+        q = question or ""
+        markers = (
+            ("character", ("任务类型：角色生成", "「角色生成」创作模板")),
+            ("scene", ("任务类型：场景提示词", "「场景提示词」创作模板")),
+            ("expression", ("任务类型：表情语气模板", "「表情语气」创作模板")),
+            ("storyboard", ("任务类型：分镜脚本", "「分镜脚本」创作模板")),
+            ("plot", ("任务类型：剧情策划", "「剧情提示词」创作模板")),
+        )
+        for template, template_markers in markers:
+            if any(marker in q for marker in template_markers):
+                return template
+        return None
+
     def _is_expression_voice_request(self, question: str) -> bool:
+        explicit_template = self._explicit_prompt_template(question)
+        if explicit_template:
+            return explicit_template == "expression"
         keywords = (
             "表情提示词",
             "表情语气",
@@ -729,6 +762,9 @@ class RagAgentService:
         return any(keyword in question for keyword in keywords)
 
     def _is_character_three_view_request(self, question: str, docs: list[Document] | None = None) -> bool:
+        explicit_template = self._explicit_prompt_template(question)
+        if explicit_template:
+            return explicit_template == "character"
         keywords = (
             "三视图",
             "正视图",
@@ -824,6 +860,9 @@ class RagAgentService:
         return True
 
     def _is_scene_or_image_prompt_request(self, question: str, docs: list[Document] | None = None) -> bool:
+        explicit_template = self._explicit_prompt_template(question)
+        if explicit_template:
+            return explicit_template == "scene"
         keywords = (
             "图片分析",
             "分析图片",
@@ -885,6 +924,22 @@ class RagAgentService:
         """用轻量关键词再收窄一次目录命中的正文文件，减少无关正文检索。"""
         if not target_files:
             return []
+
+        explicit_template = self._explicit_prompt_template(question)
+        explicit_files = {
+            "character": [
+                "ai_video_character_design_chunks.md",
+                "ai_manga_character_three_view_prompt_chunks.md",
+            ],
+            "scene": ["ai_manga_image_scene_prompt_chunks.md"],
+            "expression": ["ai_manga_expression_voice_prompt_chunks.md"],
+            "storyboard": ["ai_video_script_structure_chunks.md"],
+            "plot": ["ai_video_script_structure_chunks.md"],
+        }.get(explicit_template)
+        if explicit_files:
+            narrowed = [file_name for file_name in explicit_files if file_name in target_files]
+            if narrowed:
+                return narrowed
 
         three_view_keywords = (
             "三视图",
@@ -1320,6 +1375,17 @@ class RagAgentService:
     def _infer_prompt_section_title(self, question: str, docs: list[Document] | None = None) -> str:
         """根据用户问题给提示词区块一个强制标题，避免泛问被误标为优化后提示词。"""
         q = question.strip()
+        explicit_template = self._explicit_prompt_template(q)
+        explicit_titles = {
+            "character": "【示例提示词：人物三视图设定卡】",
+            "scene": "【示例提示词：场景画面设定】",
+            "expression": "【示例提示词：表情语气细化】",
+            "storyboard": "【示例提示词：分镜脚本】",
+            "plot": "【示例提示词：剧情结构设计】",
+        }
+        if explicit_template in explicit_titles:
+            return explicit_titles[explicit_template]
+
         rewrite_markers = (
             "原提示词",
             "原始提示词",
@@ -1346,9 +1412,6 @@ class RagAgentService:
             return "【示例提示词：剧情结构设计】"
         if any(word in q for word in ("分镜导演", "分镜脚本", "镜号", "景别", "镜头角度/运动", "Markdown 表格")):
             return "【示例提示词：分镜脚本】"
-        if any(word in q for word in ("动作设计师", "动作拆解", "最终动作提示词")):
-            return "【示例提示词：动作过程细化】"
-
         file_names = {
             str((doc.metadata or {}).get("_file_name") or "")
             for doc in (docs or [])

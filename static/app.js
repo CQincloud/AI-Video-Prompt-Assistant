@@ -329,15 +329,6 @@ class SuperBizAgentApp {
 
 请按分镜脚本模板输出连续镜头，包含镜号、景别、镜头角度/运动和画面提示词。`,
             },
-            action: {
-                label: "动作提示词",
-                placeholder: "输入动作，例如：角色压抑情绪后突然拔剑…",
-                runtimeInstruction: `任务类型：动作拆解 / 动作提示词
-原始需求：
-{{input}}
-
-请按动作提示词模板输出，聚焦起始姿态、动作过程、力量方向、节奏和镜头建议。`,
-            },
             plot: {
                 label: "剧情提示词",
                 placeholder: "输入剧情想法，例如：主角误以为师兄背叛宗门…",
@@ -369,27 +360,38 @@ class SuperBizAgentApp {
     async handleScriptPromptFileSelect(event) {
         const file = event.target.files?.[0];
         if (!file) return;
-        if (!/\.(txt|md|markdown)$/i.test(file.name)) {
-            this.showNotification("剧本文件仅支持 TXT 或 Markdown", "warning");
+        if (!/\.(txt|md|markdown|docx|pdf)$/i.test(file.name)) {
+            this.showNotification("剧本文档仅支持 TXT、Markdown、Word(.docx) 或 PDF", "warning");
             event.target.value = "";
             return;
         }
-        if (file.size > 2 * 1024 * 1024) {
-            this.showNotification("第一版单个剧本文件请控制在 2MB 以内", "warning");
+        if (file.size > 15 * 1024 * 1024) {
+            this.showNotification("单个剧本文档请控制在 15MB 以内", "warning");
             event.target.value = "";
             return;
         }
+        const formData = new FormData();
+        formData.append("file", file);
+        this.setScriptPromptBusy(true, "正在读取剧本文档...");
         try {
-            const text = await file.text();
-            if (this.scriptPromptTextInput) this.scriptPromptTextInput.value = text;
+            const response = await fetch(`${this.apiBaseUrl}/script-prompts/upload`, {
+                method: "POST",
+                credentials: "include",
+                body: formData,
+            });
+            const result = await this.readJsonResponse(response);
+            const data = result.data || {};
+            if (this.scriptPromptTextInput) this.scriptPromptTextInput.value = data.text || "";
             if (this.scriptPromptTitleInput && !this.scriptPromptTitleInput.value.trim()) {
-                this.scriptPromptTitleInput.value = file.name.replace(/\.(txt|md|markdown)$/i, "");
+                this.scriptPromptTitleInput.value = data.title || file.name.replace(/\.(txt|md|markdown|docx|pdf)$/i, "");
             }
-            this.invalidateScriptPromptParse("剧本已读取，请点击解析剧本");
-            this.showNotification("剧本已读取", "success");
+            this.invalidateScriptPromptParse("剧本文档已读取，请点击解析剧本");
+            this.showNotification("剧本文档已读取", "success");
         } catch (error) {
-            this.showNotification("读取剧本文件失败", "error");
+            this.renderScriptPromptParsed("读取失败，请重新上传或粘贴剧本");
+            this.showNotification(error.message || "读取剧本文档失败", "error");
         } finally {
+            this.setScriptPromptBusy(false);
             event.target.value = "";
         }
     }
@@ -427,6 +429,7 @@ class SuperBizAgentApp {
 
     setScriptPromptBusy(isBusy, statusText = "") {
         if (this.scriptPromptParseBtn) this.scriptPromptParseBtn.disabled = isBusy;
+        if (this.scriptPromptFileBtn) this.scriptPromptFileBtn.disabled = isBusy;
         if (this.scriptPromptGenerateBtn) {
             this.scriptPromptGenerateBtn.disabled = isBusy || !this.scriptPromptState.parsedScript;
         }
@@ -434,7 +437,11 @@ class SuperBizAgentApp {
     }
 
     invalidateScriptPromptParse(statusText = "剧本内容已修改，请重新解析") {
-        if (!this.scriptPromptState.parsedScript) return;
+        if (!this.scriptPromptState.parsedScript) {
+            this.renderScriptPromptParsed(statusText);
+            this.renderScriptPromptTargets();
+            return;
+        }
         this.scriptPromptState.parsedScript = null;
         this.renderScriptPromptParsed(statusText);
         this.renderScriptPromptTargets();
@@ -459,6 +466,8 @@ class SuperBizAgentApp {
             `《${script.title || "未命名剧本"}》已识别 ${stats.character_count || 0} 个角色、` +
             `${stats.scene_count || 0} 个场景、${stats.chunk_count || 0} 个引用片段`;
 
+        const visualContext = this.getScriptPromptVisualContext(script);
+        const visualChips = this.buildScriptPromptVisualChips(visualContext);
         const characters = (script.characters || []).map((character) => `
             <button type="button" class="script-prompt-chip" data-target-type="character" data-script-target="${this.escapeHtml(character.name)}">
                 <span>${this.escapeHtml(character.name)}</span>
@@ -477,6 +486,12 @@ class SuperBizAgentApp {
                 <span>场景 ${stats.scene_count || 0}</span>
                 <span>片段 ${stats.chunk_count || 0}</span>
             </div>
+            ${visualChips ? `
+                <div class="script-prompt-structure-section">
+                    <h3>视觉线索</h3>
+                    <div class="script-prompt-chip-row">${visualChips}</div>
+                </div>
+            ` : ""}
             <div class="script-prompt-structure-section">
                 <h3>人物</h3>
                 <div class="script-prompt-chip-row">${characters || "<span class='script-prompt-muted'>未识别到人物表</span>"}</div>
@@ -488,8 +503,30 @@ class SuperBizAgentApp {
         `;
     }
 
+    getScriptPromptVisualContext(source) {
+        const context = source?.visualContext || source?.visual_context || source?.script?.visualContext || source?.script?.visual_context || null;
+        return context && Object.keys(context).length ? context : null;
+    }
+
+    getScriptPromptVisualList(context, snakeKey, camelKey = "") {
+        const value = context?.[snakeKey] || (camelKey ? context?.[camelKey] : null) || [];
+        return Array.isArray(value) ? value.filter(Boolean) : [];
+    }
+
+    buildScriptPromptVisualChips(context) {
+        if (!context) return "";
+        const chips = [
+            ...this.getScriptPromptVisualList(context, "era_hints", "eraHints"),
+            ...this.getScriptPromptVisualList(context, "genre_hints", "genreHints"),
+            ...this.getScriptPromptVisualList(context, "worldview_hints", "worldviewHints"),
+            ...this.getScriptPromptVisualList(context, "region_hints", "regionHints"),
+            ...this.getScriptPromptVisualList(context, "occupation_hints", "occupationHints"),
+        ].slice(0, 14);
+        return chips.map((chip) => `<span class="script-prompt-chip is-static">${this.escapeHtml(chip)}</span>`).join("");
+    }
+
     selectScriptPromptType(type) {
-        const allowedTypes = ["character", "scene", "storyboard", "action", "plot"];
+        const allowedTypes = ["character", "scene"];
         this.scriptPromptState.generationType = allowedTypes.includes(type) ? type : "character";
         this.scriptPromptTypeGrid?.querySelectorAll(".script-prompt-type").forEach((item) => {
             item.classList.toggle("active", item.dataset.type === this.scriptPromptState.generationType);
@@ -500,7 +537,7 @@ class SuperBizAgentApp {
     selectScriptPromptTarget(type, target) {
         if (type === "character") {
             this.selectScriptPromptType("character");
-        } else if (type === "scene" && !["scene", "storyboard", "action"].includes(this.scriptPromptState.generationType)) {
+        } else if (type === "scene" && this.scriptPromptState.generationType !== "scene") {
             this.selectScriptPromptType("scene");
         }
         this.renderScriptPromptTargets(target);
@@ -537,7 +574,7 @@ class SuperBizAgentApp {
                 ? characters.map((character) => ({ value: character.name, label: character.name }))
                 : [{ value: "", label: "未识别到角色" }];
         }
-        if (["scene", "storyboard", "action"].includes(type)) {
+        if (type === "scene") {
             const scenes = script.scenes || [];
             return scenes.length
                 ? scenes.map((scene) => ({
@@ -546,10 +583,7 @@ class SuperBizAgentApp {
                 }))
                 : [{ value: "", label: "未识别到场景" }];
         }
-        if (type === "plot") {
-            return [{ value: script.title || "整部剧", label: `整部剧：${script.title || "当前剧本"}` }];
-        }
-        return [{ value: script.title || "当前剧本", label: script.title || "当前剧本" }];
+        return [{ value: "", label: "请选择人物或场景" }];
     }
 
     async generateScriptPrompt() {
@@ -603,9 +637,6 @@ class SuperBizAgentApp {
         const labels = {
             character: "人物提示词",
             scene: "场景提示词",
-            storyboard: "分镜提示词",
-            action: "动作提示词",
-            plot: "剧情提示词",
         };
         return labels[type] || "提示词";
     }
@@ -614,9 +645,6 @@ class SuperBizAgentApp {
         const mapping = {
             character: "character",
             scene: "scene",
-            storyboard: "storyboard",
-            action: "action",
-            plot: "plot",
         };
         return mapping[type] || "";
     }
@@ -646,6 +674,11 @@ class SuperBizAgentApp {
         const templateLabel = this.promptTemplates[this.getScriptPromptTemplateForType(generationType)]?.label || typeLabel;
         const includeEnglish = Boolean(data?.includeEnglish || this.scriptPromptEnglishToggle?.checked);
         const references = data?.references || [];
+        const visualContext =
+            this.getScriptPromptVisualContext(data) ||
+            this.getScriptPromptVisualContext(this.scriptPromptState.parsedScript);
+        const visualContextText = this.buildScriptPromptVisualContextText(visualContext);
+        const constraintRules = this.buildScriptPromptConstraintRules(generationType);
         const referenceText = references.map((reference, index) => [
             `引用 ${index + 1}`,
             `chunk_id：${reference.chunk_id || ""}`,
@@ -661,17 +694,78 @@ class SuperBizAgentApp {
             `平台用途：${platform}`,
             `英文版：${includeEnglish ? "需要生成" : "不需要，除非我后续明确要求"}`,
             `补充需求：${userRequirement || "保持剧本设定，适合 AI 漫剧 / AI 短剧生产。"}`,
+            "【V1 视觉策略】",
+            "本任务不做联网历史考据，也不要把模型常识伪装成剧本事实。",
+            "请把剧本中的时代、地域、职业、身份、题材、关键道具和光影氛围写清楚，用它们约束人物/场景风格。",
+            "剧本未明确的服饰制度、建筑制度、民族细节只能作为「合理推断」或「风格方向」，不得写成确定史实。",
+            "最终提示词要适合复制到外部 AI 绘图/视频工具继续生成。",
+            visualContextText,
             "输出要求：",
+            ...constraintRules,
             ...(generationType === "character" ? [
                 "0. 这是人物/角色提示词任务，必须输出人物三视图设定卡，包含正视图、侧视图、后视图的一致性要求。",
             ] : []),
-            "1. 负面提示词必须保留。",
-            "2. 引用依据只能使用下面的剧本片段，不要编造剧本原文。",
-            "3. 剧本没有直接写明但为了视觉化需要补充的内容，必须标为合理推断。",
-            "4. 最终提示词要方便直接使用。",
+            "1. 必须输出「剧本确定信息」「合理推断」「最终提示词」「负面提示词」。",
+            "2. 负面提示词必须专门防止跑偏到错误时代、错误职业、错误地域、现代服装、网游风、卡通风或过度恐怖风。",
+            "3. 引用依据只能使用下面的剧本片段和视觉线索证据，不要编造剧本原文。",
+            "4. 剧本没有直接写明但为了视觉化需要补充的内容，必须标为合理推断。",
+            "5. 最终提示词要方便直接使用。",
             "【剧本引用片段】",
             referenceText || "暂无可用引用片段。",
         ].join("\n");
+    }
+
+    buildScriptPromptVisualContextText(context) {
+        const rows = [
+            ["时代线索", this.getScriptPromptVisualList(context, "era_hints", "eraHints")],
+            ["题材线索", this.getScriptPromptVisualList(context, "genre_hints", "genreHints")],
+            ["世界观线索", this.getScriptPromptVisualList(context, "worldview_hints", "worldviewHints")],
+            ["地域线索", this.getScriptPromptVisualList(context, "region_hints", "regionHints")],
+            ["职业/身份线索", this.getScriptPromptVisualList(context, "occupation_hints", "occupationHints")],
+            ["关键道具线索", this.getScriptPromptVisualList(context, "prop_hints", "propHints")],
+            ["光影情绪线索", this.getScriptPromptVisualList(context, "tone_hints", "toneHints")],
+        ].filter(([, values]) => values.length);
+
+        const evidenceQuotes = this.getScriptPromptVisualList(context, "evidence_quotes", "evidenceQuotes")
+            .map((item) => {
+                if (typeof item === "string") return item;
+                return `${item.term || "线索"}：${item.quote || ""}`;
+            })
+            .filter(Boolean)
+            .slice(0, 8);
+
+        if (!rows.length && !evidenceQuotes.length) {
+            return [
+                "【全剧视觉线索】",
+                "未提取到明确时代、地域、职业或道具线索；请只基于剧本引用片段生成，不要自行指定具体朝代或民族考据。",
+            ].join("\n");
+        }
+
+        return [
+            "【全剧视觉线索】",
+            ...rows.map(([label, values]) => `${label}：${values.join("、")}`),
+            ...(evidenceQuotes.length ? ["视觉线索证据：", ...evidenceQuotes.map((quote, index) => `${index + 1}. ${quote}`)] : []),
+        ].join("\n");
+    }
+
+    buildScriptPromptConstraintRules(generationType) {
+        const baseRules = [
+            "必须把时代背景、地域背景、题材类型、身份职业、关键道具、光影色彩写进最终提示词；没有明确线索的项写「未明确」或放入合理推断。",
+            "如果剧本出现类似「民国二十三年」「省衙差头」这类线索，最终提示词必须保留这些词，并用负面提示词排除现代警察、上海滩名媛、古代捕快等跑偏方向。",
+        ];
+        if (generationType === "character") {
+            return [
+                ...baseRules,
+                "人物提示词必须包含：人物身份、年龄/性别线索、性格气质、服装方向、发型/配饰/随身道具、姿态表情、画面风格、光影色彩。",
+            ];
+        }
+        if (generationType === "scene") {
+            return [
+                ...baseRules,
+                "场景提示词必须包含：地点功能、时代地域、空间结构、前景/中景/远景、关键标志物、材质、光影、主色调、氛围情绪。",
+            ];
+        }
+        return baseRules;
     }
 
     getScriptPromptPlatformLabel(value) {

@@ -52,10 +52,6 @@ COMPACT_PROMPT_TEMPLATE_INSTRUCTIONS = {
         "任务类型：分镜脚本 / 镜头表格\n"
         "请按分镜脚本模板输出连续镜头，包含镜号、景别、镜头角度/运动和画面提示词。"
     ),
-    "action": (
-        "任务类型：动作拆解 / 动作提示词\n"
-        "请按动作提示词模板输出，聚焦起始姿态、动作过程、力量方向、节奏和镜头建议。"
-    ),
     "plot": (
         "任务类型：剧情策划 / 剧情结构\n"
         "请按剧情提示词模板输出剧情核心、人物关系、冲突推进、情绪弧线和结尾钩子；不要默认拆分镜。"
@@ -119,7 +115,7 @@ def _build_compact_model_question(
     template_key = (prompt_template or "").strip()
     instruction = COMPACT_PROMPT_TEMPLATE_INSTRUCTIONS.get(template_key)
     if not instruction:
-        return (fallback_model_question or question).strip()
+        return clean_question
     fallback_question = (fallback_model_question or "").strip()
     if fallback_question.startswith("【剧本引用提示词生成任务】"):
         clean_question = fallback_question

@@ -805,8 +805,23 @@ button {
 }
 
 .script-prompt-chip {
+    display: inline-flex;
+    align-items: center;
     min-height: 34px;
     padding: 0 10px;
+}
+
+.script-prompt-chip.is-static {
+    cursor: default;
+    color: #6a5a4c;
+    background: rgba(250, 245, 236, 0.76);
+}
+
+.script-prompt-chip.is-static:hover {
+    color: #6a5a4c;
+    background: rgba(250, 245, 236, 0.76);
+    border-color: rgba(98, 75, 53, 0.1);
+    transform: none;
 }
 
 .script-prompt-chip:hover,
