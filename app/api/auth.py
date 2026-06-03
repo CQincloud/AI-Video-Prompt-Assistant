@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import config
 from app.models.auth import LoginRequest, SendCodeRequest
-from app.api.request_utils import get_client_ip
+from app.api.request_utils import get_client_ip, should_use_secure_auth_cookie
 from app.services.auth_service import AuthError, auth_service
 from loguru import logger
 
@@ -44,7 +44,7 @@ async def login(payload: LoginRequest, request: Request, response: Response):
             value=token,
             max_age=config.auth_session_ttl_hours * 3600,
             httponly=True,
-            secure=config.auth_cookie_secure,
+            secure=should_use_secure_auth_cookie(request),
             samesite="lax",
             path="/",
         )
@@ -73,5 +73,11 @@ async def me(request: Request):
 @router.post("/auth/logout")
 async def logout(request: Request, response: Response):
     auth_service.logout(request.cookies.get(config.auth_cookie_name))
-    response.delete_cookie(config.auth_cookie_name, path="/")
+    response.delete_cookie(
+        config.auth_cookie_name,
+        path="/",
+        secure=should_use_secure_auth_cookie(request),
+        httponly=True,
+        samesite="lax",
+    )
     return {"code": 200, "message": "已退出登录", "data": None}

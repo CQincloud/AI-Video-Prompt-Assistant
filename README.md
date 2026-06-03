@@ -68,6 +68,15 @@ Required for real SMS login:
 
 - Aliyun SMS signature, template, AccessKey ID, and AccessKey secret
 
+## Browser Support
+
+Supported browsers:
+
+- Latest stable Chrome, Edge, Firefox, and Safari.
+- Recent mobile browsers based on Chrome for Android and iOS Safari.
+
+Legacy browsers are not supported. The static frontend intentionally ships without a JavaScript transpilation or polyfill pipeline and relies on native ES2020+ syntax, Fetch streaming, `AbortController`, `<dialog>`, CSS Grid/Flex, dynamic viewport units, and related modern browser APIs.
+
 ## Installation
 
 Windows PowerShell:

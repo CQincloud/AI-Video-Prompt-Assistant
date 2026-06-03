@@ -24,6 +24,28 @@ def get_client_ip(request: Request) -> str | None:
     return _normalize_ip(direct_host)
 
 
+def should_use_secure_auth_cookie(request: Request) -> bool:
+    """Return whether auth cookies should be marked Secure for this request."""
+    if not config.auth_cookie_secure:
+        return False
+    if config.is_production:
+        return True
+    return _request_is_https(request)
+
+
+def _request_is_https(request: Request) -> bool:
+    if request.url.scheme == "https":
+        return True
+
+    direct_host = request.client.host if request.client else None
+    if direct_host and _is_trusted_proxy(direct_host):
+        forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        proto = forwarded_proto.split(",", 1)[0].strip().lower()
+        return proto == "https"
+
+    return False
+
+
 def _first_forwarded_ip(forwarded_for: str | None) -> str | None:
     if not forwarded_for:
         return None
