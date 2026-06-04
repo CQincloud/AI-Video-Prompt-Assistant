@@ -314,6 +314,8 @@ class SuperBizAgentApp {
 {{input}}
 
 请按场景画面模板输出，聚焦空间、光影、氛围、构图和影像风格。
+冷开场、开场钩子、预告钩子、片头钩子和高能开场不作为单一场景生成；应选择其中具体地点或具体场景片段。
+除非用户明确要求近景、特写、局部或俯拍，默认使用全景/远景环境构图，完整展示空间结构和主要环境关系。
 场景提示词只生成空环境画面，不出现任何人物、角色、人体、背影、剪影、手部、面部或人群。
 如果原始需求包含人物动作，只能转写为环境状态或痕迹，例如门半开、卷宗散落、雨水脚印、灯火未熄，不得让人物出现在画面中。`,
             },
@@ -468,9 +470,10 @@ class SuperBizAgentApp {
         }
 
         const stats = script.stats || {};
+        const generatableScenes = this.getScriptPromptGeneratableScenes(script);
         this.scriptPromptStatus.textContent =
             `《${script.title || "未命名剧本"}》已识别 ${stats.character_count || 0} 个角色、` +
-            `${stats.scene_count || 0} 个场景、${stats.chunk_count || 0} 个引用片段`;
+            `${generatableScenes.length} 个可生成场景、${stats.chunk_count || 0} 个引用片段`;
 
         const visualContext = this.getScriptPromptVisualContext(script);
         const visualChips = this.buildScriptPromptVisualChips(visualContext);
@@ -479,7 +482,7 @@ class SuperBizAgentApp {
                 <span>${this.escapeHtml(character.name)}</span>
             </button>
         `).join("");
-        const scenes = (script.scenes || []).map((scene) => `
+        const scenes = generatableScenes.map((scene) => `
             <button type="button" class="script-prompt-structure-item" data-target-type="scene" data-script-target="${this.escapeHtml(scene.scene_number || scene.location || "")}">
                 <span>${this.escapeHtml(scene.scene_number || "场景")}</span>
                 <small>${this.escapeHtml([scene.location, scene.time].filter(Boolean).join(" / "))}</small>
@@ -489,7 +492,7 @@ class SuperBizAgentApp {
         this.scriptPromptStructure.innerHTML = `
             <div class="script-prompt-stats">
                 <span>角色 ${stats.character_count || 0}</span>
-                <span>场景 ${stats.scene_count || 0}</span>
+                <span>可生成场景 ${generatableScenes.length}</span>
                 <span>片段 ${stats.chunk_count || 0}</span>
             </div>
             ${visualChips ? `
@@ -504,9 +507,24 @@ class SuperBizAgentApp {
             </div>
             <div class="script-prompt-structure-section">
                 <h3>场景</h3>
-                <div class="script-prompt-scene-list">${scenes || "<span class='script-prompt-muted'>未识别到场景标题</span>"}</div>
+                <div class="script-prompt-scene-list">${scenes || "<span class='script-prompt-muted'>未识别到可生成场景</span>"}</div>
             </div>
         `;
+    }
+
+    isScriptPromptColdOpenScene(sceneOrValue) {
+        const text = typeof sceneOrValue === "string"
+            ? sceneOrValue
+            : [
+                sceneOrValue?.scene_number,
+                sceneOrValue?.heading,
+                sceneOrValue?.location,
+            ].filter(Boolean).join(" ");
+        return /冷开场|开场钩子|预告钩子|片头钩子|高能开场|先导钩子|前情钩子/.test(text || "");
+    }
+
+    getScriptPromptGeneratableScenes(script) {
+        return (script?.scenes || []).filter((scene) => !this.isScriptPromptColdOpenScene(scene));
     }
 
     getScriptPromptVisualContext(source) {
@@ -547,10 +565,6 @@ class SuperBizAgentApp {
             this.selectScriptPromptType("scene");
         }
         this.renderScriptPromptTargets(target);
-        const typeLabel = this.getScriptPromptTypeLabel(this.scriptPromptState.generationType);
-        if (this.scriptPromptRequirementInput && !this.scriptPromptRequirementInput.value.trim()) {
-            this.scriptPromptRequirementInput.value = `生成${target}的${typeLabel}，真人写实电影感，适合 AI 短剧。`;
-        }
         this.scriptPromptRequirementInput?.focus();
     }
 
@@ -581,13 +595,13 @@ class SuperBizAgentApp {
                 : [{ value: "", label: "未识别到角色" }];
         }
         if (type === "scene") {
-            const scenes = script.scenes || [];
+            const scenes = this.getScriptPromptGeneratableScenes(script);
             return scenes.length
                 ? scenes.map((scene) => ({
                     value: scene.scene_number || scene.location,
                     label: [scene.scene_number, scene.location, scene.time].filter(Boolean).join(" / "),
                 }))
-                : [{ value: "", label: "未识别到场景" }];
+                : [{ value: "", label: "未识别到可生成场景" }];
         }
         return [{ value: "", label: "请选择人物或场景" }];
     }
@@ -608,6 +622,10 @@ class SuperBizAgentApp {
         const promptTemplate = this.getScriptPromptTemplateForType(generationType);
         if (!promptTemplate) {
             this.showNotification("当前类型没有对应的系统提示词模板", "warning");
+            return;
+        }
+        if (generationType === "scene" && this.isScriptPromptColdOpenScene(target)) {
+            this.showNotification("冷开场不作为单独场景生成，请选择具体场景片段", "warning");
             return;
         }
         this.setScriptPromptBusy(true, "正在整理剧本引用...");
@@ -705,7 +723,7 @@ class SuperBizAgentApp {
             `请按当前选择的「${templateLabel}」创作模板输出，不要另起自由格式。`,
             `平台用途：${platform}`,
             `英文版：${includeEnglish ? "需要生成" : "不需要，除非我后续明确要求"}`,
-            `补充需求：${userRequirement || "保持剧本设定，适合 AI 漫剧 / AI 短剧生产。"}`,
+            `补充需求：${userRequirement || "未填写"}`,
             "【V1 视觉策略】",
             "本任务不做联网历史考据，也不要把未验证常识伪装成剧本事实。",
             visualStrategyRule,
@@ -783,6 +801,8 @@ class SuperBizAgentApp {
             return [
                 "必须把时代背景、地域背景、题材类型、地点功能、空间结构、关键环境道具、天气/时间、光影色彩写进最终场景提示词；没有明确线索的项写「未明确」或放入合理推断。",
                 "场景提示词必须包含：地点功能、时代地域、空间结构、前景/中景/远景、关键标志物、材质、光影、主色调、氛围情绪。",
+                "冷开场、开场钩子、预告钩子、片头钩子和高能开场不作为单一场景生成；如目标为冷开场，请改为选择其中具体地点或具体场景片段。",
+                "除非用户明确要求近景、特写、局部、俯拍或其他景别，场景生成默认使用全景/远景环境构图，完整展示空间结构、入口、主要陈设和环境关系。",
                 "场景提示词只生成空环境画面，正向提示词里不得出现任何人物、角色、行人、人群、人体、背影、剪影、手部、面部、演员或模特。",
                 "剧本里的人物、职业、动作和对话只能用于推断地点功能、环境状态和痕迹；例如“人物冲进档案房”只能写档案房门半开、卷宗散落、地面有雨水脚印，不能写人物入画。",
                 "不得写人物外貌、服装、表情、站位、动作、关系或对话内容；不得写“女主站在门口”“差头走进省衙”“人影立在楼内”等人物画面。",

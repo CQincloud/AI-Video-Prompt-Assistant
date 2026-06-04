@@ -54,6 +54,15 @@ class ScriptPromptService:
         "runway": "Runway",
         "pika": "Pika",
     }
+    COLD_OPEN_SCENE_TERMS = (
+        "冷开场",
+        "开场钩子",
+        "预告钩子",
+        "片头钩子",
+        "高能开场",
+        "先导钩子",
+        "前情钩子",
+    )
     TIME_WORDS = {
         "日",
         "夜",
@@ -355,6 +364,8 @@ class ScriptPromptService:
             raise ScriptPromptError("当前生成类型没有对应的系统提示词模板")
         if len(request.user_requirement or "") > 3000:
             raise ScriptPromptError("补充需求过长，请精简到 3000 字以内")
+        if request.generation_type == "scene" and self._is_cold_open_scene_text(request.target):
+            raise ScriptPromptError("冷开场不作为单独场景生成，请选择具体地点或具体场景片段")
 
     def retrieve_references(
         self,
@@ -364,6 +375,17 @@ class ScriptPromptService:
         limit: int = 8,
     ) -> list[dict[str, Any]]:
         chunks = list(parsed_script.get("chunks") or [])
+        if request.generation_type == "scene":
+            chunks = [
+                chunk
+                for chunk in chunks
+                if not self._is_cold_open_scene_text(
+                    " ".join(
+                        str(chunk.get(key) or "")
+                        for key in ("source", "scene", "location")
+                    )
+                )
+            ]
         if not chunks:
             return []
 
@@ -1081,7 +1103,11 @@ class ScriptPromptService:
                 "rest": numbered_match.group(2).strip(),
             }
 
-        special_match = re.match(r"^(冷开场|序场|片头|尾声|结尾|彩蛋)\s*[·.．、:：-]\s*(.+?)\s*$", clean)
+        special_terms = "|".join(
+            re.escape(term)
+            for term in (*self.COLD_OPEN_SCENE_TERMS, "序场", "片头", "尾声", "结尾", "彩蛋")
+        )
+        special_match = re.match(rf"^({special_terms})\s*[·.．、:：-]\s*(.+?)\s*$", clean)
         if special_match:
             return {
                 "scene_number": special_match.group(1).strip(),
@@ -1399,8 +1425,11 @@ class ScriptPromptService:
         if generation_type == "character":
             return "用于提取角色动作、情绪、气质和成长反差"
         if generation_type == "scene":
-            return "用于确定地点、时间、环境元素、人物调度和氛围"
-        return "用于补充人物调度、环境氛围和画面依据"
+            return "用于确定地点、时间、环境元素、环境痕迹和氛围"
+        return "用于补充环境氛围和画面依据"
+
+    def _is_cold_open_scene_text(self, value: str) -> bool:
+        return any(term in (value or "") for term in self.COLD_OPEN_SCENE_TERMS)
 
     def _slugify(self, value: str) -> str:
         ascii_part = re.sub(r"[^A-Za-z0-9_-]+", "_", value).strip("_").lower()
