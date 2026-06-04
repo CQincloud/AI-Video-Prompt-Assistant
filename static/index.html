@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>炬成 AI 视频提示词助手</title>
-    <link rel="stylesheet" href="/static/styles.css?v=20260604-cold-open-filter">
+    <link rel="stylesheet" href="/static/styles.css?v=20260604-scene-16x9-time-v9">
     <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css">
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
@@ -300,9 +300,9 @@
                 </div>
                 <label class="script-prompt-label" for="scriptPromptTargetSelect">目标对象</label>
                 <select id="scriptPromptTargetSelect" class="script-prompt-select"></select>
-                <label class="script-prompt-label" for="scriptPromptPlatformSelect">平台用途</label>
+                <label class="script-prompt-label" for="scriptPromptPlatformSelect">用途（场景统一 16:9）</label>
                 <select id="scriptPromptPlatformSelect" class="script-prompt-select">
-                    <option value="general" selected>通用</option>
+                    <option value="short_vertical" selected>短剧平台（16:9 场景资产，后期裁切）</option>
                     <option value="midjourney">Midjourney</option>
                     <option value="stable_diffusion">Stable Diffusion</option>
                     <option value="jimeng">即梦</option>
@@ -330,6 +330,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js?v=20260604-cold-open-filter"></script>
+    <script src="/static/app.js?v=20260604-scene-16x9-time-v9"></script>
 </body>
 </html>

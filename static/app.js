@@ -313,11 +313,24 @@ class SuperBizAgentApp {
 原始需求：
 {{input}}
 
-请按场景画面模板输出，聚焦空间、光影、氛围、构图和影像风格。
+请按导演级空场景资产图模板输出，先锁定时间天气，再聚焦空间、尺度、前景/中景/远景、主体预留区、光影、色彩、构图和影像风格。
+最终标题使用【示例提示词：导演级空场景资产图】，最终提示词必须按【美学】【主题】【时间天气】【尺度】【前景】【中景】【主体预留区】【远景】【关键元素】【光影】【色彩】【镜头质感】【避免】【比例】输出。
+场景类只允许输出一套最终可复制提示词：在【示例提示词：导演级空场景资产图】下先写“正向提示词：”并包含上述字段，再写“负面提示词：”；不得在后面再次输出“## 正向提示词”“## 负面提示词”、压缩版、二次整理版或重复可复制区块。
+【回答自检】必须放在最终提示词区块之后，且不属于可复制提示词内容。
 冷开场、开场钩子、预告钩子、片头钩子和高能开场不作为单一场景生成；应选择其中具体地点或具体场景片段。
-除非用户明确要求近景、特写、局部或俯拍，默认使用全景/远景环境构图，完整展示空间结构和主要环境关系。
-场景提示词只生成空环境画面，不出现任何人物、角色、人体、背影、剪影、手部、面部或人群。
-如果原始需求包含人物动作，只能转写为环境状态或痕迹，例如门半开、卷宗散落、雨水脚印、灯火未熄，不得让人物出现在画面中。`,
+除非用户明确要求近景、特写、局部或俯拍，默认使用全景/远景环境构图，完整展示空间结构、入口、主要陈设和环境关系。
+场景提示词默认生成空场景资产图，不出现任何人物、角色、人体、背影、剪影、手部、面部或人群。
+必须保留「主体预留区」：说明后续人物入画的空置表演区、行动通道、视线焦点和镜头调度空间。
+如果原始需求包含人物动作，只能转写为环境状态、空间需求、主体预留区或痕迹，例如门半开、卷宗散落、雨水脚印、灯火未熄、桌前留出空椅，不得让人物出现在画面中。
+输出前必须先做空间逻辑建模：登记核心家具与关键道具数量，判断哪些物件唯一存在；同一核心家具跨越前景/中景/远景时，必须写明“同一张/同一组/同一件”，不得写成第二件同类家具。
+前景、中景、远景必须属于同一个连续空间，不是三个独立陈设区；除非用户明确要求桌面近景或特写，全景/远景空场景的前景不得把主书案、主桌、供桌、床、柜台等核心家具写成独立前景物件，可改用门框、柱脚、地面光影、书架侧边、屏风边缘或暗部墙角做框景。
+如果场景只有一张主书案/主桌/供桌/柜台，最终提示词必须明确“全场仅一张”，并在【关键元素】或【避免】中排除第二张桌、重复案几、额外工作台、副桌和重复桌面。
+输出前做同类物件重复检查：案桌/书桌/书案/桌面/工作台、烛台/灯具、床榻/坐榻、书架/柜架、门窗等在不同景别中反复出现时，必须判断是否为同一物件；若剧本未明确多件，自动合并为一件核心物件。
+文字类载体按剧情需要处理：牌匾、卷宗、报纸、招牌、门牌等可以作为场景道具存在，但不要强制模型生成可读文字；具体文字内容建议后期合成或以留白/模糊区域处理。
+【时间天气】必须单独输出，优先锁定用户或剧本给出的早、午、晚、白日、夜晚、黄昏、下雨、晴天、阴天等信息；不得把白日写成夜晚，不得把黄昏写成深夜/月光，不得把未写雨的场景写成雨夜。
+【比例】必须同时写场景图比例和视频比例；所有场景默认横版 16:9，核心视觉锚点、关键道具和主体预留区保持在横屏安全构图内，并保留中轴可裁切空间。
+必须锁定用户给出的时间、天气、地点和道具状态；不要把黄昏写成夜晚/月光/雨夜，不要把晴天写成雨天，不要把木窗写成玻璃窗，除非原文或用户明确要求。
+场景资产图任务不得输出【可选增强】、动态化建议、声音设计或视频镜头调度；这些只在用户明确要求视频分镜时输出。`,
             },
             expression: {
                 label: "表情语气",
@@ -638,7 +651,7 @@ class SuperBizAgentApp {
                     parsedScript,
                     generationType,
                     target,
-                    platform: this.scriptPromptPlatformSelect?.value || "general",
+                    platform: this.scriptPromptPlatformSelect?.value || "short_vertical",
                     userRequirement,
                     includeEnglish: Boolean(this.scriptPromptEnglishToggle?.checked),
                 }),
@@ -675,14 +688,17 @@ class SuperBizAgentApp {
 
     buildScriptPromptDisplayQuestion(data, userRequirement = "") {
         const scriptTitle = data?.script?.title || this.scriptPromptState.parsedScript?.title || "当前剧本";
-        const generationType = data?.generationType || this.scriptPromptState.generationType;
+        const generationType = data?.generationType || data?.generation_type || this.scriptPromptState.generationType;
         const target = data?.target || this.scriptPromptTargetSelect?.value || scriptTitle;
-        const platform = this.getScriptPromptPlatformLabel(data?.platform || this.scriptPromptPlatformSelect?.value || "general");
+        const platformValue = data?.platform || this.scriptPromptPlatformSelect?.value || "short_vertical";
+        const platform = this.getScriptPromptPlatformLabel(platformValue);
+        const aspectSpec = this.getScriptPromptAspectSpec(platformValue);
         const typeLabel = this.getScriptPromptTypeLabel(generationType);
         const includeEnglish = Boolean(data?.includeEnglish || this.scriptPromptEnglishToggle?.checked);
         const lines = [
             `基于剧本《${scriptTitle}》，生成${target ? `「${target}」的` : ""}${typeLabel}。`,
-            `平台用途：${platform}`,
+            `用途：${platform}`,
+            ...(generationType === "scene" ? [`比例要求：${aspectSpec.display}`] : []),
         ];
         if (userRequirement) lines.push(`补充需求：${userRequirement}`);
         if (includeEnglish) lines.push("同时生成英文版。");
@@ -691,9 +707,11 @@ class SuperBizAgentApp {
 
     buildScriptPromptModelQuestion(data, userRequirement = "") {
         const scriptTitle = data?.script?.title || this.scriptPromptState.parsedScript?.title || "当前剧本";
-        const generationType = data?.generationType || this.scriptPromptState.generationType;
+        const generationType = data?.generationType || data?.generation_type || this.scriptPromptState.generationType;
         const target = data?.target || this.scriptPromptTargetSelect?.value || scriptTitle;
-        const platform = this.getScriptPromptPlatformLabel(data?.platform || this.scriptPromptPlatformSelect?.value || "general");
+        const platformValue = data?.platform || this.scriptPromptPlatformSelect?.value || "short_vertical";
+        const platform = this.getScriptPromptPlatformLabel(platformValue);
+        const aspectSpec = this.getScriptPromptAspectSpec(platformValue);
         const typeLabel = this.getScriptPromptTypeLabel(generationType);
         const templateLabel = this.promptTemplates[this.getScriptPromptTemplateForType(generationType)]?.label || typeLabel;
         const includeEnglish = Boolean(data?.includeEnglish || this.scriptPromptEnglishToggle?.checked);
@@ -704,10 +722,10 @@ class SuperBizAgentApp {
         const visualContextText = this.buildScriptPromptVisualContextText(visualContext);
         const constraintRules = this.buildScriptPromptConstraintRules(generationType);
         const visualStrategyRule = generationType === "scene"
-            ? "请把剧本中的时代、地域、题材、地点功能、空间结构、关键环境道具和光影氛围写清楚；人物、职业、动作和对话只能作为推断场景状态的线索，不得写成人物入画。"
+            ? "请生成导演级空场景资产图：默认不出现人物；必须优先锁定剧本时间天气，再把剧本中的人物、职业、动作和对话转译为地点功能、主体预留区、行动通道、环境痕迹、视线焦点和光影氛围。不得把场景图写成人物表演图。"
             : "请把剧本中的时代、地域、职业、身份、题材、关键道具和光影氛围写清楚，用它们约束人物/场景风格。";
         const negativePromptRule = generationType === "scene"
-            ? "2. 场景负面提示词必须排除人物、角色、行人、人群、背影、人体、脸、手、脚、剪影、演员、模特、站立人物、走动人物、文字和水印。"
+            ? "2. 场景负面提示词必须排除人物、角色、行人、人群、背影、人体、脸、手、脚、剪影、演员、模特、站立人物和走动人物；文字类载体按剧情需要处理，不做全局禁用。"
             : "2. 负面提示词必须专门防止跑偏到错误时代、错误职业、错误地域、现代服装、网游风、卡通风或过度恐怖风。";
         const referenceText = references.map((reference, index) => [
             `引用 ${index + 1}`,
@@ -721,10 +739,11 @@ class SuperBizAgentApp {
             "【剧本引用提示词生成任务】",
             `请基于剧本《${scriptTitle}》生成${target ? `「${target}」的` : ""}${typeLabel}。`,
             `请按当前选择的「${templateLabel}」创作模板输出，不要另起自由格式。`,
-            `平台用途：${platform}`,
+            `用途：${platform}`,
+            ...(generationType === "scene" ? [`比例硬规则：${aspectSpec.model}`] : []),
             `英文版：${includeEnglish ? "需要生成" : "不需要，除非我后续明确要求"}`,
             `补充需求：${userRequirement || "未填写"}`,
-            "【V1 视觉策略】",
+            generationType === "scene" ? "【V2 导演级空场景策略】" : "【V1 视觉策略】",
             "本任务不做联网历史考据，也不要把未验证常识伪装成剧本事实。",
             visualStrategyRule,
             "剧本未明确的服饰制度、建筑制度、民族细节只能作为「合理推断」或「风格方向」，不得写成确定史实。",
@@ -799,14 +818,30 @@ class SuperBizAgentApp {
         }
         if (generationType === "scene") {
             return [
-                "必须把时代背景、地域背景、题材类型、地点功能、空间结构、关键环境道具、天气/时间、光影色彩写进最终场景提示词；没有明确线索的项写「未明确」或放入合理推断。",
-                "场景提示词必须包含：地点功能、时代地域、空间结构、前景/中景/远景、关键标志物、材质、光影、主色调、氛围情绪。",
+                "必须把时代背景、地域背景、题材类型、地点功能、空间结构、关键环境道具、时间天气、光影色彩写进最终场景提示词；没有明确线索的项写「未明确」或放入合理推断。",
+                "场景提示词必须按导演级空场景资产结构输出：美学、主题、时间天气、尺度、前景、中景、主体预留区、远景、关键元素、光影、色彩、镜头质感、避免、比例。",
+                "最终标题必须使用【示例提示词：导演级空场景资产图】；不要输出旧标题【示例提示词：场景画面设定】。",
+                "场景类只允许输出一套最终可复制提示词：在【示例提示词：导演级空场景资产图】下先写“正向提示词：”并包含全部结构字段，再写“负面提示词：”；不得在后面再次输出“## 正向提示词”“## 负面提示词”、压缩版、二次整理版或重复可复制区块。",
+                "【回答自检】必须放在最终提示词区块之后，且不属于可复制提示词内容。",
                 "冷开场、开场钩子、预告钩子、片头钩子和高能开场不作为单一场景生成；如目标为冷开场，请改为选择其中具体地点或具体场景片段。",
                 "除非用户明确要求近景、特写、局部、俯拍或其他景别，场景生成默认使用全景/远景环境构图，完整展示空间结构、入口、主要陈设和环境关系。",
                 "场景提示词只生成空环境画面，正向提示词里不得出现任何人物、角色、行人、人群、人体、背影、剪影、手部、面部、演员或模特。",
-                "剧本里的人物、职业、动作和对话只能用于推断地点功能、环境状态和痕迹；例如“人物冲进档案房”只能写档案房门半开、卷宗散落、地面有雨水脚印，不能写人物入画。",
+                "【时间天气】必须单独输出，优先级高于美学、光影和色彩；先取用户明确补充，再取剧本场次标题，再取剧本文本环境线索。早/午/晚、白日/夜晚、黄昏/清晨、下雨/晴天/阴天等不得被改写。",
+                "如果剧本明确白日，不得写夜色、月光、烛火主光或雨夜；如果剧本明确黄昏，不得改成深夜或月光；如果剧本明确下雨，必须体现雨气、湿润材质或檐水；如果剧本未写雨，不得擅自添加雨、伞、雷电或湿地面。",
+                "必须输出「主体预留区」：说明后续人物入画的空置表演区、行动通道、视线焦点、镜头调度空间，以及哪些陈设不能遮挡人物。",
+                "如果同一场有多个动作功能点，主体预留区要拆成多个可拍摄工作区，例如窗台画图区、火塘缝衣区、桌边递物区、角落取物区，而不是只写“房间中央空地”。",
+                "剧本里的人物、职业、动作和对话只能用于推断地点功能、环境状态、空间需求、主体预留区和痕迹；例如“人物冲进档案房”只能写档案房门半开、卷宗散落、地面有雨水脚印、门口到案桌之间保留行动通道，不能写人物入画。",
+                "输出前必须先做空间逻辑建模：登记核心家具与关键道具数量，判断哪些物件唯一存在；同一核心家具跨越前景/中景/远景时，必须写明“同一张/同一组/同一件”，不得写成第二件同类家具。",
+                "前景、中景、远景必须属于同一个连续空间，不是三个独立陈设区；除非用户明确要求桌面近景或特写，全景/远景空场景的前景不得把主书案、主桌、供桌、床、柜台等核心家具写成独立前景物件，可改用门框、柱脚、地面光影、书架侧边、屏风边缘或暗部墙角做框景。",
+                "如果场景只有一张主书案/主桌/供桌/柜台，最终提示词必须明确“全场仅一张”，并在【关键元素】或【避免】中排除第二张桌、重复案几、额外工作台、副桌和重复桌面。",
+                "输出前做同类物件重复检查：案桌/书桌/书案/桌面/工作台、烛台/灯具、床榻/坐榻、书架/柜架、门窗等在不同景别中反复出现时，必须判断是否为同一物件；若剧本未明确多件，自动合并为一件核心物件。",
                 "不得写人物外貌、服装、表情、站位、动作、关系或对话内容；不得写“女主站在门口”“差头走进省衙”“人影立在楼内”等人物画面。",
-                "负面提示词必须包含：人物、角色、行人、人群、背影、人体、脸、手、脚、剪影、演员、模特、站立人物、走动人物、文字、水印。",
+                "必须锁定剧本事实：时间、天气、地点、建筑材质、窗户类型和道具状态只能来自剧本或用户补充；不得把黄昏改成夜晚/月光，不得把晴天写成雨天，不得把未写雨的场景改成雨夜，不得把木窗改成玻璃窗。",
+                "必须判断道具生命周期：请柬、银钗、旧画、星图、卷宗等道具是隐藏、静置、递出、展开还是收回；空场景图只能写当前空间中合理存在或预留的位置，不得写“手中的银钗”等人物持有状态。",
+                "文字类载体按剧情需要处理：牌匾、卷宗、报纸、招牌、门牌等可以作为场景道具存在；不要强制模型生成可读文字，具体文字内容建议后期合成或以留白/模糊区域处理。",
+                "【比例】字段必须同时写场景图比例和视频比例；所有场景统一写横版 16:9，不再输出其他比例；关键道具和表演区必须处于横屏安全构图内，并保留中轴可裁切空间。",
+                "场景资产图任务不得输出【可选增强】、动态化建议、声音设计或视频镜头调度；这些内容只在用户明确要求视频分镜时输出。",
+                "负面提示词必须包含人物相关排除项：人物、角色、行人、人群、背影、人体、脸、手、脚、剪影、演员、模特、站立人物、走动人物。",
             ];
         }
         return baseRules;
@@ -814,7 +849,9 @@ class SuperBizAgentApp {
 
     getScriptPromptPlatformLabel(value) {
         const labels = {
-            general: "通用",
+            short_vertical: "短剧平台（统一 16:9 场景资产）",
+            horizontal_video: "短剧平台（统一 16:9 场景资产）",
+            general: "短剧平台（统一 16:9 场景资产）",
             midjourney: "Midjourney",
             stable_diffusion: "Stable Diffusion",
             jimeng: "即梦",
@@ -823,6 +860,13 @@ class SuperBizAgentApp {
             pika: "Pika",
         };
         return labels[value] || value || "通用";
+    }
+
+    getScriptPromptAspectSpec(value) {
+        return {
+            display: "场景图比例 16:9；视频比例 16:9 横版构图；保留中轴可裁切空间。",
+            model: "【比例】必须写：场景图比例：横版 16:9；视频比例：16:9 横版视频构图；核心视觉锚点、关键道具和主体预留区保持在横屏安全构图内，并保留中轴可裁切空间，便于后期竖屏截取。",
+        };
     }
 
     async startScriptPromptChat(displayQuestion, promptTemplate, modelQuestion = displayQuestion) {
@@ -1456,6 +1500,46 @@ class SuperBizAgentApp {
             const decoder = new TextDecoder();
             let buffer = "";
 
+            const processStreamEvent = async (event) => {
+                const dataLines = event
+                    .split(/\r?\n/)
+                    .filter((line) => line.startsWith("data:"));
+                if (!dataLines.length) return;
+
+                const payload = dataLines
+                    .map((line) => line.replace(/^data:\s?/, ""))
+                    .join("\n");
+                if (!payload) return;
+
+                try {
+                    const parsed = JSON.parse(payload);
+                    if (parsed.type === "content") {
+                        fullAnswer += parsed.data || "";
+                        typewriter.push(parsed.data || "");
+                    } else if (parsed.type === "status") {
+                        if (!fullAnswer) {
+                            this.updateMessage(messageElement, parsed.data || "火宝正在思考...", true);
+                        }
+                    } else if (parsed.type === "done") {
+                        const doneAnswer = parsed.data?.answer;
+                        const finalAnswer =
+                            typeof doneAnswer === "string" && doneAnswer.length >= fullAnswer.length
+                                ? doneAnswer
+                                : fullAnswer;
+                        fullAnswer = finalAnswer;
+                        if (!streamCompleted) {
+                            streamCompleted = true;
+                            await typewriter.finish(finalAnswer);
+                        }
+                    } else if (parsed.type === "error") {
+                        throw new Error(parsed.data || "流式回答失败");
+                    }
+                } catch (error) {
+                    if (error instanceof SyntaxError) return;
+                    throw error;
+                }
+            };
+
             while (true) {
                 const { value, done } = await reader.read();
                 if (done) break;
@@ -1464,32 +1548,14 @@ class SuperBizAgentApp {
                 buffer = events.pop() || "";
 
                 for (const event of events) {
-                    const dataLine = event.split(/\r?\n/).find((line) => line.startsWith("data:"));
-                    if (!dataLine) continue;
-                    const payload = dataLine.replace(/^data:\s*/, "");
-                    try {
-                        const parsed = JSON.parse(payload);
-                        if (parsed.type === "content") {
-                            fullAnswer += parsed.data || "";
-                            typewriter.push(parsed.data || "");
-                        } else if (parsed.type === "status") {
-                            if (!fullAnswer) {
-                                this.updateMessage(messageElement, parsed.data || "火宝正在思考...", true);
-                            }
-                        } else if (parsed.type === "done") {
-                            const finalAnswer = parsed.data?.answer || fullAnswer;
-                            fullAnswer = finalAnswer;
-                            if (!streamCompleted) {
-                                streamCompleted = true;
-                                await typewriter.finish(finalAnswer);
-                            }
-                        } else if (parsed.type === "error") {
-                            throw new Error(parsed.data || "流式回答失败");
-                        }
-                    } catch (error) {
-                        if (error instanceof SyntaxError) continue;
-                        throw error;
-                    }
+                    await processStreamEvent(event);
+                }
+            }
+            buffer += decoder.decode();
+            if (buffer.trim()) {
+                const remainingEvents = buffer.split(/\r?\n\r?\n/).filter((event) => event.trim());
+                for (const event of remainingEvents) {
+                    await processStreamEvent(event);
                 }
             }
 
@@ -1864,6 +1930,7 @@ class SuperBizAgentApp {
         const historyMessage = save ? this.createHistoryMessage(type, content, metadata) : null;
         message.dataset.messageId = historyMessage?.id || metadata.id || this.generateMessageId();
         message.dataset.content = content || "";
+        message._rawContent = content || "";
         if (metadata.prompt) message.dataset.prompt = metadata.prompt;
         if (metadata.modelPrompt) message.dataset.modelPrompt = metadata.modelPrompt;
         if (metadata.model) message.dataset.model = metadata.model;
@@ -1932,6 +1999,7 @@ class SuperBizAgentApp {
         const body = this.getMessageContentBody(messageElement);
         if (!body) return;
         const shouldScroll = this.shouldAutoScroll;
+        messageElement._rawContent = content || "";
         body.classList.toggle("streaming", streaming);
         body.classList.toggle("streaming-plain", streaming);
         if (streaming) {
@@ -2028,8 +2096,9 @@ class SuperBizAgentApp {
             this.closeMobileMessageActions(actions);
             actions.classList.toggle("mobile-actions-open", willOpen);
         });
-        actions.querySelector('[data-action="copy"]')?.addEventListener("click", () => {
-            this.copyAssistantMessage(messageElement);
+        const copyButton = actions.querySelector('[data-action="copy"]');
+        copyButton?.addEventListener("click", () => {
+            this.copyAssistantMessage(messageElement, copyButton);
             this.closeMobileMessageActions();
         });
         actions.querySelector('[data-action="like"]')?.addEventListener("click", () => {
@@ -2076,15 +2145,17 @@ class SuperBizAgentApp {
         });
     }
 
-    async copyAssistantMessage(messageElement) {
-        const text = this.getAssistantMessageText(messageElement);
+    async copyAssistantMessage(messageElement, button = null) {
+        const text = this.stripAnswerSelfCheck(this.getAssistantMessageRawText(messageElement)).trim();
         if (!text) return;
 
-        await this.copyTextToClipboard(text);
+        this.setCopyButtonState(button, "copying");
+        const copied = await this.copyTextToClipboard(text);
+        this.setCopyButtonState(button, copied ? "copied" : "idle");
     }
 
     async copyPromptSectionFromMessage(messageElement, titleText, button) {
-        const source = messageElement.dataset.content || this.getAssistantMessageText(messageElement);
+        const source = this.getAssistantMessageRawText(messageElement);
         const text = this.extractPromptSectionText(source, titleText);
         if (!text) return;
 
@@ -2101,16 +2172,37 @@ class SuperBizAgentApp {
         }, 1400);
     }
 
-    async copyTextToClipboard(text, successMessage = "已复制") {
-        let copied = false;
+    async copyTextToClipboard(text, successMessage = "复制成功") {
+        const content = String(text || "");
+        let copied = this.copyTextWithFallback(content);
+
+        if (!copied) {
+            copied = await this.writeClipboardText(content);
+        }
+
+        if (copied) {
+            const verified = await this.verifyClipboardWrite(content);
+            if (verified === false) {
+                const rewrote = await this.writeClipboardText(content);
+                copied = rewrote ? (await this.verifyClipboardWrite(content)) !== false : false;
+            }
+        }
+
+        const message = copied
+            ? `${successMessage}（已复制 ${content.length} 字）`
+            : "复制失败，请手动选择文本复制";
+        this.showNotification(message, copied ? "success" : "error");
+        return copied;
+    }
+
+    async writeClipboardText(text) {
+        if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) return false;
         try {
             await navigator.clipboard.writeText(text);
-            copied = true;
+            return true;
         } catch (error) {
-            copied = this.copyTextWithFallback(text);
+            return false;
         }
-        this.showNotification(copied ? successMessage : "复制失败", copied ? "success" : "error");
-        return copied;
     }
 
     copyTextWithFallback(text) {
@@ -2118,20 +2210,87 @@ class SuperBizAgentApp {
         textarea.value = text;
         textarea.setAttribute("readonly", "");
         textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
+        textarea.style.top = "0";
+        textarea.style.left = "0";
+        textarea.style.width = "1px";
+        textarea.style.height = "1px";
+        textarea.style.opacity = "0.01";
+        textarea.style.zIndex = "2147483647";
         document.body.appendChild(textarea);
+        try {
+            textarea.focus({ preventScroll: true });
+        } catch (error) {
+            textarea.focus();
+        }
         textarea.select();
-        const copied = document.execCommand("copy");
+        textarea.setSelectionRange(0, textarea.value.length);
+        let copied = false;
+        try {
+            copied = document.execCommand("copy");
+        } catch (error) {
+            copied = false;
+        }
         textarea.remove();
         return copied;
+    }
+
+    async verifyClipboardWrite(expectedText) {
+        if (typeof navigator === "undefined" || !navigator.clipboard?.readText) return null;
+        try {
+            const actualText = await navigator.clipboard.readText();
+            return this.normalizeClipboardText(actualText) === this.normalizeClipboardText(expectedText);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    normalizeClipboardText(text) {
+        return String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    }
+
+    setCopyButtonState(button, state) {
+        if (!button) return;
+        if (state === "copying") {
+            button.dataset.copyState = "copying";
+            button.title = "正在复制";
+            button.setAttribute("aria-label", "正在复制");
+            return;
+        }
+        if (state === "copied") {
+            button.dataset.copyState = "copied";
+            button.title = "复制成功";
+            button.setAttribute("aria-label", "复制成功");
+            window.setTimeout(() => this.setCopyButtonState(button, "idle"), 1400);
+            return;
+        }
+        delete button.dataset.copyState;
+        button.title = "复制消息";
+        button.setAttribute("aria-label", "复制消息");
     }
 
     getAssistantMessageText(messageElement) {
         return this.getMessageContentBody(messageElement)?.innerText.trim() || "";
     }
 
+    getAssistantMessageRawText(messageElement) {
+        const historyContent = this.findHistoryMessageById(messageElement?.dataset?.messageId)?.content;
+        const rawCandidates = [
+            historyContent,
+            messageElement?._rawContent,
+            messageElement?.dataset?.content,
+        ].filter((value) => typeof value === "string" && value.trim());
+        if (rawCandidates.length) {
+            return rawCandidates.reduce((longest, current) =>
+                current.length > longest.length ? current : longest
+            );
+        }
+
+        return this.getAssistantMessageText(messageElement);
+    }
+
     enhancePromptCopySections(container, messageElement) {
         if (!container || !messageElement) return;
+        const source = this.getAssistantMessageRawText(messageElement);
 
         const titlePattern = /【(?:示例提示词(?:[:：][^】]*)?|优化后提示词)】/;
         const titleElements = Array.from(container.querySelectorAll("p, h1, h2, h3, h4, h5, h6"))
@@ -2143,7 +2302,7 @@ class SuperBizAgentApp {
 
         titleElements.forEach(({ element, title }) => {
             if (element.querySelector(".prompt-copy-btn")) return;
-            if (!this.extractPromptSectionText(messageElement.dataset.content || "", title)) return;
+            if (!this.extractPromptSectionText(source, title)) return;
 
             element.classList.add("prompt-section-title");
             const button = document.createElement("button");
@@ -2178,12 +2337,26 @@ class SuperBizAgentApp {
             start = fallbackMatch.index;
         }
 
-        const rest = text.slice(start);
-        const nextHeading = rest.slice(titleText.length).match(/\n\s*【(?!正向提示词|负面提示词)[^】]+】/);
+        const rest = this.stripAnswerSelfCheck(text.slice(start));
+        const nextHeading = rest.slice(titleText.length).match(this.getPromptSectionStopPattern());
         const section = nextHeading
             ? rest.slice(0, titleText.length + nextHeading.index)
             : rest;
         return section.trim();
+    }
+
+    stripAnswerSelfCheck(text) {
+        const normalized = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+        const selfCheckPattern =
+            /(?:^|\n)\s*(?:-{3,}\s*\n+)?\s*(?:#{1,6}\s*)?(?:\*\*)?(?:【\s*回答自检\s*】|回答自检)(?:\*\*)?\s*(?:[:：]|\n|$)/;
+        const match = normalized.match(selfCheckPattern);
+        if (!match) return normalized;
+        const index = match.index + (match[0].startsWith("\n") ? 1 : 0);
+        return normalized.slice(0, index).trim();
+    }
+
+    getPromptSectionStopPattern() {
+        return /(?:^|\n)\s*(?:-{3,}\s*\n+)?\s*(?:#{1,6}\s*)?(?:\*\*)?(?:【(?:理解你的需求|知识库依据|导演级场景拆解|创作拆解|视频创作拆解|可选增强|回答自检|补充说明|注意事项|下一步|示例提示词(?:[:：][^】]*)?|优化后提示词)】|(?:理解你的需求|知识库依据|导演级场景拆解|创作拆解|视频创作拆解|可选增强|回答自检|补充说明|注意事项|下一步)(?:\*\*)?\s*(?:[:：]|\n|$))/;
     }
 
     toggleAssistantFeedback(messageElement, feedback) {
@@ -2275,7 +2448,11 @@ class SuperBizAgentApp {
 
     findHistoryMessageById(messageId) {
         if (!messageId) return null;
-        return this.currentChatHistory.find((message) => message.id === messageId) || null;
+        for (let index = this.currentChatHistory.length - 1; index >= 0; index -= 1) {
+            const message = this.currentChatHistory[index];
+            if (message.id === messageId) return message;
+        }
+        return null;
     }
 
     createHistoryMessage(type, content, metadata = {}) {
@@ -2309,8 +2486,18 @@ class SuperBizAgentApp {
             model: metadata.model || messageElement.dataset.model,
             promptTemplate: metadata.promptTemplate || messageElement.dataset.promptTemplate,
         });
-        this.currentChatHistory.push(historyMessage);
+        const existingIndex = this.currentChatHistory.findIndex((message) => message.id === historyMessage.id);
+        if (existingIndex >= 0) {
+            this.currentChatHistory[existingIndex] = {
+                ...this.currentChatHistory[existingIndex],
+                ...historyMessage,
+            };
+        } else {
+            this.currentChatHistory.push(historyMessage);
+        }
         messageElement.dataset.messageId = historyMessage.id;
+        messageElement.dataset.content = content || "";
+        messageElement._rawContent = content || "";
         if (historyMessage.prompt) messageElement.dataset.prompt = historyMessage.prompt;
         if (historyMessage.modelPrompt) messageElement.dataset.modelPrompt = historyMessage.modelPrompt;
         if (historyMessage.model) messageElement.dataset.model = historyMessage.model;

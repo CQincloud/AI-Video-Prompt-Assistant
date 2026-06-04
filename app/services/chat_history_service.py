@@ -272,50 +272,55 @@ class ChatHistoryService:
                     session_id=session_id,
                     title=self._title_from_content(content) if role == "user" else None,
                 )
-                try:
-                    cursor.execute(
-                        """
-                        INSERT INTO chat_messages (
-                            session_id,
-                            user_id,
-                            role,
-                            content,
-                            client_message_id,
-                            parent_message_id,
-                            metadata,
-                            created_at
-                        )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                        RETURNING
-                            id,
-                            session_id,
-                            user_id,
-                            role,
-                            content,
-                            client_message_id,
-                            parent_message_id,
-                            metadata,
-                            created_at
-                        """,
-                        (
-                            session_id,
-                            user_id,
-                            role,
-                            content,
-                            client_message_id,
-                            parent_message_id,
-                            Jsonb(metadata or {}),
-                            self._now(),
+                cursor.execute(
+                    """
+                    INSERT INTO chat_messages (
+                        session_id,
+                        user_id,
+                        role,
+                        content,
+                        client_message_id,
+                        parent_message_id,
+                        metadata,
+                        created_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (session_id, client_message_id)
+                    WHERE client_message_id IS NOT NULL
+                    DO UPDATE SET
+                        content = CASE
+                            WHEN char_length(EXCLUDED.content) >= char_length(chat_messages.content)
+                            THEN EXCLUDED.content
+                            ELSE chat_messages.content
+                        END,
+                        parent_message_id = COALESCE(
+                            EXCLUDED.parent_message_id,
+                            chat_messages.parent_message_id
                         ),
-                    )
-                    row = cursor.fetchone()
-                except psycopg.errors.UniqueViolation:
-                    conn.rollback()
-                    return self.get_message_by_client_id(
-                        user_id=user_id,
-                        session_id=session_id,
-                        client_message_id=client_message_id or "",
-                    )
+                        metadata = chat_messages.metadata || EXCLUDED.metadata
+                    RETURNING
+                        id,
+                        session_id,
+                        user_id,
+                        role,
+                        content,
+                        client_message_id,
+                        parent_message_id,
+                        metadata,
+                        created_at
+                    """,
+                    (
+                        session_id,
+                        user_id,
+                        role,
+                        content,
+                        client_message_id,
+                        parent_message_id,
+                        Jsonb(metadata or {}),
+                        self._now(),
+                    ),
+                )
+                row = cursor.fetchone()
 
                 self._touch_session(
                     cursor,
