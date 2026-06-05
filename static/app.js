@@ -327,7 +327,7 @@ class SuperBizAgentApp {
 剧本未明确服装细节时，只写“符合某年代某主要身份的服装”，不要自行细化颜色、面料、鞋履、外套或配饰。`,
             },
             scene: {
-                label: "场景提示词",
+                label: "场景生成",
                 placeholder: "输入场景想法，例如：雨夜皇宫内殿，女主发现密信…",
                 runtimeInstruction: `任务类型：场景提示词
 原始需求：
@@ -800,7 +800,7 @@ class SuperBizAgentApp {
     getScriptPromptTypeLabel(type) {
         const labels = {
             character: "人物提示词",
-            scene: "场景提示词",
+            scene: "场景生成",
         };
         return labels[type] || "提示词";
     }
