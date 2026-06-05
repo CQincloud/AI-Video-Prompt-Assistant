@@ -24,7 +24,7 @@ class ModelCatalogError(RuntimeError):
 
 class ModelService:
     CACHE_TTL_SECONDS = 30
-    SUPPORTED_PROVIDERS = {"dashscope"}
+    SUPPORTED_PROVIDERS = {"dashscope", "deepseek"}
     MODEL_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
 
     def __init__(self) -> None:
@@ -72,9 +72,28 @@ class ModelService:
         if not clean_model:
             return self.default_model(use_cache=False)
 
+        requested_provider: str | None = None
+        requested_model_id = clean_model
+        if ":" in clean_model:
+            provider_part, model_part = clean_model.split(":", 1)
+            try:
+                requested_provider = self._clean_provider(provider_part)
+                requested_model_id = self._clean_model_id(model_part)
+            except AdminError as exc:
+                raise ModelCatalogError(exc.message, status_code=exc.status_code) from exc
+
+        matches: list[dict[str, Any]] = []
         for model in self.list_available_models(use_cache=False):
-            if model["modelId"] == clean_model:
-                return model
+            if requested_provider:
+                if model["provider"] == requested_provider and model["modelId"] == requested_model_id:
+                    return model
+            elif model["modelId"] == requested_model_id or model.get("modelKey") == clean_model:
+                matches.append(model)
+
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ModelCatalogError("模型供应商不明确，请重新选择模型", status_code=400)
 
         raise ModelCatalogError("模型不在白名单或已停用", status_code=400)
 
@@ -193,9 +212,8 @@ class ModelService:
                         """
                         UPDATE ai_models
                         SET is_default = FALSE
-                        WHERE provider = %s AND is_deleted = FALSE
+                        WHERE is_deleted = FALSE
                         """,
-                        (clean_provider,),
                     )
                 try:
                     cursor.execute(
@@ -306,9 +324,9 @@ class ModelService:
                         """
                         UPDATE ai_models
                         SET is_default = FALSE
-                        WHERE provider = %s AND id <> %s AND is_deleted = FALSE
+                        WHERE id <> %s AND is_deleted = FALSE
                         """,
-                        (target_provider, model_pk),
+                        (model_pk,),
                     )
                     if enabled is None and not current["enabled"]:
                         assignments.append("enabled = TRUE")
@@ -518,6 +536,7 @@ class ModelService:
             "id": int(row["id"]),
             "provider": row["provider"],
             "modelId": row["model_id"],
+            "modelKey": self._model_key(row["provider"], row["model_id"]),
             "displayName": row["display_name"],
             "enabled": bool(row["enabled"]),
             "isDefault": bool(row["is_default"]),
@@ -553,6 +572,7 @@ class ModelService:
             "id": None,
             "provider": "dashscope",
             "modelId": model_id,
+            "modelKey": self._model_key("dashscope", model_id),
             "displayName": model_id,
             "enabled": True,
             "isDefault": True,
@@ -578,8 +598,11 @@ class ModelService:
     def _clean_provider(self, value: str | None) -> str:
         provider = (value or "dashscope").strip().lower()
         if provider not in self.SUPPORTED_PROVIDERS:
-            raise AdminError("当前仅支持 dashscope 模型供应商", status_code=400)
+            raise AdminError("当前仅支持 dashscope 或 deepseek 模型供应商", status_code=400)
         return provider
+
+    def _model_key(self, provider: str, model_id: str) -> str:
+        return f"{provider}:{model_id}"
 
     def _clean_model_id(self, value: str) -> str:
         model_id = value.strip()

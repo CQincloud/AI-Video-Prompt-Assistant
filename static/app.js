@@ -367,8 +367,15 @@ class SuperBizAgentApp {
         this.scriptPromptPanel.hidden = false;
         this.scriptPromptOverlay.hidden = false;
         document.body.classList.add("script-prompt-open");
-        this.scriptPromptTextInput?.focus();
+        if (this.shouldAutofocusScriptPrompt()) {
+            this.scriptPromptTextInput?.focus();
+        }
         this.renderScriptPromptTargets();
+    }
+
+    shouldAutofocusScriptPrompt() {
+        const isMobileViewport = window.matchMedia?.("(max-width: 767px), (pointer: coarse)")?.matches;
+        return !isMobileViewport;
     }
 
     closeScriptPromptPanel() {
@@ -965,10 +972,10 @@ class SuperBizAgentApp {
             this.availableModels = result.data?.models || [];
             const defaultModel = result.data?.defaultModel;
             const savedModel = this.currentModel;
-            const hasSavedModel = this.availableModels.some((model) => model.modelId === savedModel);
-            this.currentModel = hasSavedModel
-                ? savedModel
-                : defaultModel?.modelId || this.availableModels[0]?.modelId || savedModel || "";
+            const savedModelMatch = this.availableModels.find((model) => this.getModelKey(model) === savedModel || model.modelId === savedModel);
+            this.currentModel = savedModelMatch
+                ? this.getModelKey(savedModelMatch)
+                : this.getModelKey(defaultModel) || this.getModelKey(this.availableModels[0]) || savedModel || "";
             if (this.currentModel) {
                 localStorage.setItem("juchengCurrentModel", this.currentModel);
             }
@@ -978,6 +985,7 @@ class SuperBizAgentApp {
             console.warn("加载模型列表失败:", error);
             if (!this.currentModel) this.currentModel = "qwen3.7-plus";
             this.availableModels = [{
+                modelKey: this.currentModel,
                 modelId: this.currentModel,
                 displayName: this.currentModel,
                 isDefault: true,
@@ -989,7 +997,7 @@ class SuperBizAgentApp {
 
     selectModel(modelId) {
         if (!modelId || this.isStreaming) return;
-        const exists = this.availableModels.some((model) => model.modelId === modelId);
+        const exists = this.availableModels.some((model) => this.getModelKey(model) === modelId || model.modelId === modelId);
         if (!exists) return;
         this.currentModel = modelId;
         localStorage.setItem("juchengCurrentModel", this.currentModel);
@@ -997,11 +1005,17 @@ class SuperBizAgentApp {
     }
 
     getCurrentModel() {
-        return this.currentModel || this.availableModels[0]?.modelId || "";
+        return this.currentModel || this.getModelKey(this.availableModels[0]) || "";
     }
 
     getModelById(modelId) {
-        return this.availableModels.find((model) => model.modelId === modelId) || null;
+        return this.availableModels.find((model) => this.getModelKey(model) === modelId || model.modelId === modelId) || null;
+    }
+
+    getModelKey(model) {
+        if (!model) return "";
+        if (model.modelKey) return model.modelKey;
+        return model.provider && model.modelId ? `${model.provider}:${model.modelId}` : model.modelId || "";
     }
 
     renderModelMenu() {
@@ -1011,12 +1025,12 @@ class SuperBizAgentApp {
             return;
         }
         this.modelMenuList.innerHTML = this.availableModels.map((model) => `
-            <div class="model-menu-item" data-model="${this.escapeHtml(model.modelId)}">
+            <div class="model-menu-item" data-model="${this.escapeHtml(this.getModelKey(model))}">
                 <div class="dropdown-item-main">
                     <span>${this.escapeHtml(model.displayName || model.modelId)}</span>
                     ${model.isDefault ? `<span class="badge-new">默认</span>` : ""}
                 </div>
-                <div class="dropdown-item-sub">${this.escapeHtml(model.modelId)}</div>
+                <div class="dropdown-item-sub">${this.escapeHtml(model.provider || "dashscope")} / ${this.escapeHtml(model.modelId)}</div>
             </div>
         `).join("");
         this.updateModelUI();
@@ -1029,7 +1043,7 @@ class SuperBizAgentApp {
             this.currentModelText.textContent = model?.displayName || modelId || "模型";
         }
         this.modelMenuList?.querySelectorAll(".model-menu-item").forEach((item) => {
-            item.classList.toggle("active", item.dataset.model === modelId);
+            item.classList.toggle("active", item.dataset.model === modelId || item.dataset.model === this.getModelKey(model));
         });
     }
 

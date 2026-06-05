@@ -87,6 +87,10 @@ class Settings(BaseSettings):
     dashscope_request_timeout_seconds: float = 60.0
     dashscope_connect_timeout_seconds: float = 10.0
     dashscope_max_retries: int = 2
+    deepseek_api_key: str = ""
+    deepseek_base_url: str = "https://api.deepseek.com"
+    deepseek_request_timeout_seconds: float = 60.0
+    deepseek_max_retries: int = 2
     image_upload_max_size: int = 10 * 1024 * 1024
     image_upload_max_count: int = 4
     image_generation_poll_timeout_seconds: int = 120
@@ -133,6 +137,10 @@ class Settings(BaseSettings):
             )
         if self.dashscope_max_retries < 0 or self.dashscope_max_retries > 5:
             runtime_errors.append("DASHSCOPE_MAX_RETRIES must be between 0 and 5")
+        if self.deepseek_request_timeout_seconds <= 0:
+            runtime_errors.append("DEEPSEEK_REQUEST_TIMEOUT_SECONDS must be positive")
+        if self.deepseek_max_retries < 0 or self.deepseek_max_retries > 5:
+            runtime_errors.append("DEEPSEEK_MAX_RETRIES must be between 0 and 5")
         if self.aliyun_sms_connect_timeout_ms <= 0:
             runtime_errors.append("ALIYUN_SMS_CONNECT_TIMEOUT_MS must be positive")
         if self.aliyun_sms_read_timeout_ms <= 0:

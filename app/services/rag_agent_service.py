@@ -23,6 +23,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
 from loguru import logger
 from typing_extensions import TypedDict
+from langchain_openai import ChatOpenAI
 from langchain_qwq import ChatQwen
 
 from app.config import config
@@ -113,7 +114,7 @@ class RagAgentService:
         # Agent 按模型缓存，避免切换模型时每次请求都重建。
         self.agent = None
         self._agents: dict[str, Any] = {}
-        self._models: dict[str, ChatQwen] = {}
+        self._models: dict[str, Any] = {}
         self._agent_init_locks: dict[str, asyncio.Lock] = {}
         self._grounding_cache: OrderedDict[str, tuple[float, list[Document]]] = OrderedDict()
         self._grounded_prompt_cache: OrderedDict[str, tuple[float, str, str]] = OrderedDict()
@@ -123,9 +124,52 @@ class RagAgentService:
     def _normalize_model_name(self, model_name: str | None = None) -> str:
         return (model_name or self.model_name or config.rag_model or "qwen3.7-plus").strip()
 
-    def _create_chat_model(self, model_name: str) -> ChatQwen:
+    def _normalize_model_spec(
+        self,
+        *,
+        model: dict[str, Any] | None = None,
+        model_name: str | None = None,
+    ) -> dict[str, str]:
+        if model:
+            provider = (model.get("provider") or "dashscope").strip().lower()
+            model_id = (model.get("modelId") or model.get("model") or "").strip()
+            display_name = (model.get("displayName") or model_id).strip()
+        else:
+            provider = "dashscope"
+            model_id = self._normalize_model_name(model_name)
+            display_name = model_id
+
+        if not model_id:
+            model_id = self._normalize_model_name(model_name)
+        cache_key = f"{provider}:{model_id}"
+        return {
+            "provider": provider,
+            "model_id": model_id,
+            "display_name": display_name or model_id,
+            "cache_key": cache_key,
+        }
+
+    def _create_chat_model(self, model_spec: dict[str, str]) -> Any:
+        provider = model_spec["provider"]
+        model_id = model_spec["model_id"]
+        if provider == "deepseek":
+            if not config.deepseek_api_key:
+                raise RuntimeError("DEEPSEEK_API_KEY is not configured")
+            return ChatOpenAI(
+                model=model_id,
+                api_key=config.deepseek_api_key,
+                base_url=config.deepseek_base_url,
+                timeout=config.deepseek_request_timeout_seconds,
+                max_retries=config.deepseek_max_retries,
+                temperature=0.2,
+                streaming=self.streaming,
+                extra_body={"thinking": {"type": "disabled"}},
+            )
+
+        if not config.dashscope_api_key:
+            raise RuntimeError("DASHSCOPE_API_KEY is not configured")
         return ChatQwen(
-            model=model_name,
+            model=model_id,
             api_key=config.dashscope_api_key,
             base_url=config.dashscope_base_url,
             timeout=config.dashscope_request_timeout_seconds,
@@ -135,47 +179,54 @@ class RagAgentService:
             enable_thinking=False,
         )
 
-    async def _initialize_agent(self, model_name: str | None = None) -> str:
+    async def _initialize_agent(
+        self,
+        *,
+        model: dict[str, Any] | None = None,
+        model_name: str | None = None,
+    ) -> str:
         """异步初始化 Agent。"""
-        selected_model = self._normalize_model_name(model_name)
-        if selected_model in self._agents:
-            return selected_model
+        model_spec = self._normalize_model_spec(model=model, model_name=model_name)
+        cache_key = model_spec["cache_key"]
+        if cache_key in self._agents:
+            return cache_key
 
-        if selected_model not in self._agent_init_locks:
-            self._agent_init_locks[selected_model] = asyncio.Lock()
+        if cache_key not in self._agent_init_locks:
+            self._agent_init_locks[cache_key] = asyncio.Lock()
 
-        async with self._agent_init_locks[selected_model]:
-            if selected_model in self._agents:
-                return selected_model
+        async with self._agent_init_locks[cache_key]:
+            if cache_key in self._agents:
+                return cache_key
 
             init_started_at = perf_counter()
 
             all_tools = self.tools
 
             agent_build_started_at = perf_counter()
-            model = self._create_chat_model(selected_model)
+            chat_model = self._create_chat_model(model_spec)
             agent = create_agent(
-                model,
+                chat_model,
                 tools=all_tools,
                 middleware=[trim_messages_middleware],
                 checkpointer=self.checkpointer,
             )
             agent_build_elapsed_ms = (perf_counter() - agent_build_started_at) * 1000
 
-            self._models[selected_model] = model
-            self._agents[selected_model] = agent
-            if selected_model == self.model_name:
+            self._models[cache_key] = chat_model
+            self._agents[cache_key] = agent
+            if model_spec["model_id"] == self.model_name:
                 self.agent = agent
 
             if all_tools:
                 tool_names = [tool.name if hasattr(tool, "name") else str(tool) for tool in all_tools]
                 logger.info(f"可用工具列表: {', '.join(tool_names)}")
             logger.info(
-                f"RAG Agent 初始化耗时: model={selected_model}, "
+                f"RAG Agent 初始化耗时: provider={model_spec['provider']}, "
+                f"model={model_spec['model_id']}, "
                 f"agent_build={agent_build_elapsed_ms:.1f}ms, "
                 f"total={(perf_counter() - init_started_at) * 1000:.1f}ms"
             )
-        return selected_model
+        return cache_key
 
     async def warmup(self) -> None:
         """后台预热向量存储与 Agent，减少首请求等待。"""
@@ -1165,6 +1216,7 @@ class RagAgentService:
             "dashscope_model是什么",
             "rag模型是什么",
             "dashscope模型是什么",
+            "deepseek模型是什么",
         }
         if q.rstrip("？?。") in explicit_questions:
             return True
@@ -1173,24 +1225,35 @@ class RagAgentService:
             r"^(?:你|你现在|你当前|当前|现在)?(?:使用|用|调用)的?(?:是)?(?:什么|哪个|哪一个)(?:ai|大模型|模型|model)[？?。]?$",
             r"^(?:你|你现在|你当前|当前|现在)?(?:ai|大模型|模型|model)(?:是)?(?:什么|哪个|哪一个)[？?。]?$",
             r"^(?:当前|现在)?(?:rag_model|dashscope_model)(?:是)?(?:什么|多少|哪个)[？?。]?$",
-            r"^(?:当前|现在)?(?:rag|dashscope)(?:模型|model)(?:是)?(?:什么|多少|哪个)[？?。]?$",
+            r"^(?:当前|现在)?(?:rag|dashscope|deepseek)(?:模型|model)(?:是)?(?:什么|多少|哪个)[？?。]?$",
         )
         return any(re.fullmatch(pattern, q, flags=re.IGNORECASE) for pattern in explicit_patterns)
 
-    def _build_model_identity_answer(self, model_name: str | None = None) -> str:
-        active_model = self._normalize_model_name(model_name)
+    def _build_model_identity_answer(self, model_spec_or_name: dict[str, str] | str | None = None) -> str:
+        if isinstance(model_spec_or_name, dict):
+            provider = model_spec_or_name.get("provider") or "dashscope"
+            active_model = model_spec_or_name.get("model_id") or self._normalize_model_name()
+        else:
+            provider = "dashscope"
+            active_model = self._normalize_model_name(model_spec_or_name)
         rag_model = config.rag_model or "未配置"
         dashscope_model = config.dashscope_model or "未配置"
-        if active_model == rag_model:
-            summary = f"我当前对话/RAG 使用的模型是 `{active_model}`。"
+        deepseek_base_url = config.deepseek_base_url or "未配置"
+        if provider == "dashscope" and active_model == rag_model:
+            summary = f"我当前对话/RAG 使用的模型是 `dashscope/{active_model}`。"
         else:
-            summary = f"我当前这次对话请求使用的是 `{active_model}`，RAG 默认模型配置是 `{rag_model}`。"
+            summary = (
+                f"我当前这次对话请求使用的是 `{provider}/{active_model}`，"
+                f"RAG 默认模型配置是 `dashscope/{rag_model}`。"
+            )
 
         return (
             f"{summary}\n\n"
+            f"- `当前请求供应商`: `{provider}`\n"
             f"- `当前请求模型`: `{active_model}`\n"
             f"- `RAG_MODEL`: `{rag_model}`\n"
-            f"- `DASHSCOPE_MODEL`: `{dashscope_model}`\n\n"
+            f"- `DASHSCOPE_MODEL`: `{dashscope_model}`\n"
+            f"- `DEEPSEEK_BASE_URL`: `{deepseek_base_url}`\n\n"
             "`RAG_MODEL` 是当前聊天/RAG Agent 实际使用的模型；"
             "`DASHSCOPE_MODEL` 是 DashScope 通用默认模型配置，其他服务可能会引用它。"
         )
@@ -1217,6 +1280,7 @@ class RagAgentService:
             "db_password",
             "openai_api_key",
             "dashscope_api_key",
+            "deepseek_api_key",
             "alibaba_cloud_access_key_secret",
             "aliyun_sms_access_key_secret",
             "auth_secret_key",
@@ -1535,6 +1599,7 @@ class RagAgentService:
         self,
         question: str,
         session_id: str,
+        model: dict[str, Any] | None = None,
         model_name: str | None = None,
     ) -> str:
         """
@@ -1548,7 +1613,8 @@ class RagAgentService:
             str: 完整答案
         """
         try:
-            selected_model = self._normalize_model_name(model_name)
+            model_spec = self._normalize_model_spec(model=model, model_name=model_name)
+            selected_model = model_spec["cache_key"]
             request_started_at = perf_counter()
             sensitive_category = self._classify_sensitive_info_request(question)
             if sensitive_category:
@@ -1559,10 +1625,10 @@ class RagAgentService:
 
             if self._is_model_identity_request(question):
                 logger.info(f"[会话 {session_id}] 命中模型配置查询，直接返回当前模型配置: model={selected_model}")
-                return self._build_model_identity_answer(selected_model)
+                return self._build_model_identity_answer(model_spec)
 
             init_started_at = perf_counter()
-            selected_model = await self._initialize_agent(selected_model)
+            selected_model = await self._initialize_agent(model=model, model_name=model_name)
             agent = self._agents[selected_model]
             init_elapsed_ms = (perf_counter() - init_started_at) * 1000
 
@@ -1629,6 +1695,7 @@ class RagAgentService:
         self,
         question: str,
         session_id: str,
+        model: dict[str, Any] | None = None,
         model_name: str | None = None,
         emit_auxiliary_events: bool = False,
     ) -> AsyncGenerator[Dict[str, Any], None]:
@@ -1646,7 +1713,8 @@ class RagAgentService:
                 - data: 具体内容
         """
         try:
-            selected_model = self._normalize_model_name(model_name)
+            model_spec = self._normalize_model_spec(model=model, model_name=model_name)
+            selected_model = model_spec["cache_key"]
             request_started_at = perf_counter()
             sensitive_category = self._classify_sensitive_info_request(question)
             if sensitive_category:
@@ -1672,7 +1740,7 @@ class RagAgentService:
 
             if self._is_model_identity_request(question):
                 logger.info(f"[会话 {session_id}] 命中模型配置查询（流式），直接返回当前模型配置: model={selected_model}")
-                answer = self._build_model_identity_answer(selected_model)
+                answer = self._build_model_identity_answer(model_spec)
                 if emit_auxiliary_events:
                     yield {
                         "type": "search_results",
@@ -1690,7 +1758,7 @@ class RagAgentService:
                 return
 
             init_started_at = perf_counter()
-            selected_model = await self._initialize_agent(selected_model)
+            selected_model = await self._initialize_agent(model=model, model_name=model_name)
             agent = self._agents[selected_model]
             init_elapsed_ms = (perf_counter() - init_started_at) * 1000
 

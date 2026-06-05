@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 MODEL_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
+SUPPORTED_AI_MODEL_PROVIDERS = {"dashscope", "deepseek"}
 
 
 def _validate_ai_model_id(value: str) -> str:
@@ -20,8 +21,8 @@ def _validate_ai_model_id(value: str) -> str:
 
 def _validate_ai_model_provider(value: str) -> str:
     provider = value.strip().lower()
-    if provider != "dashscope":
-        raise ValueError("当前仅支持 dashscope 模型供应商")
+    if provider not in SUPPORTED_AI_MODEL_PROVIDERS:
+        raise ValueError("当前仅支持 dashscope 或 deepseek 模型供应商")
     return provider
 
 

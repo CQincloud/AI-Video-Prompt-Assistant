@@ -444,6 +444,12 @@ tbody tr:hover {
     background: #eef1f5;
 }
 
+.muted {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 4px;
+}
+
 .badge-danger {
     color: var(--danger);
     background: #fff0ee;

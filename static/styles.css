@@ -835,6 +835,11 @@ button {
 .script-prompt-scene-list {
     display: grid;
     gap: 7px;
+    max-height: min(42vh, 460px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-right: 4px;
+    -webkit-overflow-scrolling: touch;
 }
 
 .script-prompt-structure-item {
@@ -3005,11 +3010,15 @@ button {
     .script-prompt-panel {
         inset: 0;
         border-radius: 0;
+        height: 100vh;
+        height: 100dvh;
+        max-height: 100dvh;
     }
 
     .script-prompt-header {
-        min-height: 64px;
-        padding: 14px;
+        min-height: calc(64px + env(safe-area-inset-top, 0px));
+        padding: calc(12px + env(safe-area-inset-top, 0px)) 14px 12px;
+        background: rgba(255, 253, 249, 0.98);
     }
 
     .script-prompt-header h2 {
@@ -3020,16 +3029,72 @@ button {
         display: none;
     }
 
+    .script-prompt-grid {
+        display: block;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+        overflow-x: hidden;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
     .script-prompt-column {
         padding: 14px;
+        gap: 10px;
     }
 
     .script-prompt-upload-row {
         grid-template-columns: 1fr;
     }
 
+    .script-prompt-input,
+    .script-prompt-select,
+    .script-prompt-textarea,
+    .script-prompt-requirement {
+        font-size: 16px;
+    }
+
+    .script-prompt-input,
+    .script-prompt-select,
+    .script-prompt-primary-btn,
+    .script-prompt-ghost-btn {
+        min-height: 46px;
+    }
+
+    .script-prompt-primary-btn,
+    .script-prompt-ghost-btn {
+        width: 100%;
+        border-radius: 12px;
+    }
+
     .script-prompt-textarea {
-        min-height: 190px;
+        min-height: clamp(190px, 34dvh, 280px);
+        max-height: 42dvh;
+    }
+
+    .script-prompt-import-column .script-prompt-textarea {
+        min-height: clamp(190px, 34dvh, 280px);
+    }
+
+    .script-prompt-status {
+        align-items: flex-start;
+        min-height: 40px;
+        line-height: 1.5;
+    }
+
+    .script-prompt-scene-list {
+        max-height: min(38dvh, 340px);
+    }
+
+    .script-prompt-stats {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .script-prompt-stats span,
+    .script-prompt-chip,
+    .script-prompt-structure-item,
+    .script-prompt-type {
+        min-width: 0;
+        overflow-wrap: anywhere;
     }
 
     .script-prompt-type-grid {
