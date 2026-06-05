@@ -37,6 +37,7 @@ class SuperBizAgentApp {
         this.scriptPromptState = {
             parsedScript: null,
             generationType: "character",
+            sceneSearchQuery: "",
         };
 
         this.initializeElements();
@@ -149,9 +150,28 @@ class SuperBizAgentApp {
             this.selectScriptPromptType(item.dataset.type || "character");
         });
         this.scriptPromptStructure?.addEventListener("click", (event) => {
+            const clearSceneSearchBtn = event.target.closest("#scriptPromptSceneSearchClear");
+            if (clearSceneSearchBtn) {
+                this.scriptPromptState.sceneSearchQuery = "";
+                const input = document.getElementById("scriptPromptSceneSearchInput");
+                if (input) input.value = "";
+                this.renderScriptPromptSceneSearchResults();
+                input?.focus();
+                return;
+            }
             const item = event.target.closest("[data-script-target]");
             if (!item) return;
             this.selectScriptPromptTarget(item.dataset.targetType || "character", item.dataset.scriptTarget || "");
+        });
+        this.scriptPromptStructure?.addEventListener("input", (event) => {
+            if (event.isComposing || event.target?.id !== "scriptPromptSceneSearchInput") return;
+            this.scriptPromptState.sceneSearchQuery = event.target.value || "";
+            this.renderScriptPromptSceneSearchResults();
+        });
+        this.scriptPromptStructure?.addEventListener("compositionend", (event) => {
+            if (event.target?.id !== "scriptPromptSceneSearchInput") return;
+            this.scriptPromptState.sceneSearchQuery = event.target.value || "";
+            this.renderScriptPromptSceneSearchResults();
         });
         this.userAvatarBtn?.addEventListener("click", (event) => {
             event.stopPropagation();
@@ -444,6 +464,7 @@ class SuperBizAgentApp {
             });
             const result = await this.readJsonResponse(response);
             this.scriptPromptState.parsedScript = result.data?.script || null;
+            this.scriptPromptState.sceneSearchQuery = "";
             this.renderScriptPromptParsed();
             this.renderScriptPromptTargets();
             this.showNotification("剧本解析完成", "success");
@@ -471,6 +492,7 @@ class SuperBizAgentApp {
             return;
         }
         this.scriptPromptState.parsedScript = null;
+        this.scriptPromptState.sceneSearchQuery = "";
         this.renderScriptPromptParsed(statusText);
         this.renderScriptPromptTargets();
     }
@@ -502,12 +524,11 @@ class SuperBizAgentApp {
                 <span>${this.escapeHtml(character.name)}</span>
             </button>
         `).join("");
-        const scenes = generatableScenes.map((scene) => `
-            <button type="button" class="script-prompt-structure-item" data-target-type="scene" data-script-target="${this.escapeHtml(scene.scene_number || scene.location || "")}">
-                <span>${this.escapeHtml(scene.scene_number || "场景")}</span>
-                <small>${this.escapeHtml([scene.location, scene.time].filter(Boolean).join(" / "))}</small>
-            </button>
-        `).join("");
+        const sceneSearchQuery = this.scriptPromptState.sceneSearchQuery || "";
+        const sceneSearchTokens = this.getScriptPromptSearchTokens(sceneSearchQuery);
+        const filteredScenes = this.filterScriptPromptScenes(generatableScenes, sceneSearchTokens);
+        const scenes = this.buildScriptPromptSceneListHtml(filteredScenes, sceneSearchTokens, Boolean(sceneSearchQuery.trim()));
+        const sceneSearchMeta = this.getScriptPromptSceneSearchMeta(filteredScenes.length, generatableScenes.length, sceneSearchQuery);
 
         this.scriptPromptStructure.innerHTML = `
             <div class="script-prompt-stats">
@@ -527,9 +548,108 @@ class SuperBizAgentApp {
             </div>
             <div class="script-prompt-structure-section">
                 <h3>场景</h3>
-                <div class="script-prompt-scene-list">${scenes || "<span class='script-prompt-muted'>未识别到可生成场景</span>"}</div>
+                <div class="script-prompt-scene-search">
+                    <div class="script-prompt-search-field">
+                        <input type="search" id="scriptPromptSceneSearchInput" class="script-prompt-scene-search-input" placeholder="搜索场景、地点、时间、天气、人物或片段关键词" value="${this.escapeHtml(sceneSearchQuery)}" aria-label="搜索场景片段">
+                        <button type="button" id="scriptPromptSceneSearchClear" class="script-prompt-scene-search-clear${sceneSearchQuery.trim() ? "" : " is-hidden"}">清空</button>
+                    </div>
+                    <div class="script-prompt-search-meta" id="scriptPromptSceneSearchMeta">${this.escapeHtml(sceneSearchMeta)}</div>
+                </div>
+                <div class="script-prompt-scene-list" id="scriptPromptSceneList">${scenes}</div>
             </div>
         `;
+    }
+
+    renderScriptPromptSceneSearchResults() {
+        const script = this.scriptPromptState.parsedScript;
+        const sceneList = document.getElementById("scriptPromptSceneList");
+        const sceneMeta = document.getElementById("scriptPromptSceneSearchMeta");
+        const clearBtn = document.getElementById("scriptPromptSceneSearchClear");
+        if (!script || !sceneList || !sceneMeta) return;
+
+        const generatableScenes = this.getScriptPromptGeneratableScenes(script);
+        const sceneSearchQuery = this.scriptPromptState.sceneSearchQuery || "";
+        const sceneSearchTokens = this.getScriptPromptSearchTokens(sceneSearchQuery);
+        const filteredScenes = this.filterScriptPromptScenes(generatableScenes, sceneSearchTokens);
+        sceneList.innerHTML = this.buildScriptPromptSceneListHtml(filteredScenes, sceneSearchTokens, Boolean(sceneSearchQuery.trim()));
+        sceneMeta.textContent = this.getScriptPromptSceneSearchMeta(filteredScenes.length, generatableScenes.length, sceneSearchQuery);
+        clearBtn?.classList.toggle("is-hidden", !sceneSearchQuery.trim());
+    }
+
+    buildScriptPromptSceneListHtml(scenes, searchTokens = [], hasQuery = false) {
+        if (!scenes.length) {
+            return hasQuery
+                ? "<span class='script-prompt-muted'>没有找到匹配场景</span>"
+                : "<span class='script-prompt-muted'>未识别到可生成场景</span>";
+        }
+        return scenes.map((scene) => {
+            const sceneTarget = scene.scene_number || scene.location || "";
+            const sceneTitle = this.highlightScriptPromptMatch(scene.scene_number || "场景", searchTokens);
+            const sceneMeta = this.highlightScriptPromptMatch([scene.location, scene.time, scene.weather].filter(Boolean).join(" / "), searchTokens);
+            const sceneExcerpt = this.getScriptPromptSceneExcerpt(scene);
+            return `
+                <button type="button" class="script-prompt-structure-item" data-target-type="scene" data-script-target="${this.escapeHtml(sceneTarget)}">
+                    <span>${sceneTitle}</span>
+                    <small>${sceneMeta}</small>
+                    ${sceneExcerpt ? `<small class="script-prompt-scene-excerpt">${this.highlightScriptPromptMatch(sceneExcerpt, searchTokens)}</small>` : ""}
+                </button>
+            `;
+        }).join("");
+    }
+
+    getScriptPromptSceneSearchMeta(foundCount, totalCount, query = "") {
+        return query.trim() ? `已找到 ${foundCount} / ${totalCount} 个场景` : `${totalCount} 个场景`;
+    }
+
+    filterScriptPromptScenes(scenes, searchTokens = []) {
+        if (!searchTokens.length) return scenes;
+        return scenes.filter((scene) => {
+            const haystack = this.normalizeScriptPromptSearchText(this.flattenScriptPromptSearchValues(scene).join(" "));
+            return searchTokens.every((token) => haystack.includes(token));
+        });
+    }
+
+    getScriptPromptSearchTokens(query = "") {
+        return this.normalizeScriptPromptSearchText(query).split(" ").filter(Boolean);
+    }
+
+    normalizeScriptPromptSearchText(value = "") {
+        return String(value || "")
+            .toLowerCase()
+            .replace(/[，。、“”‘’：；！？（）()【】[\]{}<>《》|\\/_-]+/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    flattenScriptPromptSearchValues(value, depth = 0, seen = new Set()) {
+        if (value == null || depth > 4) return [];
+        if (["string", "number", "boolean"].includes(typeof value)) return [String(value)];
+        if (Array.isArray(value)) {
+            return value.flatMap((item) => this.flattenScriptPromptSearchValues(item, depth + 1, seen));
+        }
+        if (typeof value === "object") {
+            if (seen.has(value)) return [];
+            seen.add(value);
+            return Object.values(value).flatMap((item) => this.flattenScriptPromptSearchValues(item, depth + 1, seen));
+        }
+        return [];
+    }
+
+    getScriptPromptSceneExcerpt(scene) {
+        const text = scene.excerpt || scene.summary || scene.description || scene.original_text || scene.originalText || scene.text || scene.content || "";
+        const normalized = String(text || "").replace(/\s+/g, " ").trim();
+        return normalized.length > 92 ? `${normalized.slice(0, 92)}...` : normalized;
+    }
+
+    highlightScriptPromptMatch(value, tokens = []) {
+        let html = this.escapeHtml(value);
+        const uniqueTokens = [...new Set(tokens)].filter(Boolean).sort((a, b) => b.length - a.length);
+        uniqueTokens.forEach((token) => {
+            const escapedToken = this.escapeHtml(token);
+            if (!escapedToken) return;
+            html = html.replace(new RegExp(`(${this.escapeRegExp(escapedToken)})`, "gi"), '<mark class="script-prompt-search-mark">$1</mark>');
+        });
+        return html;
     }
 
     isScriptPromptColdOpenScene(sceneOrValue) {
@@ -2942,6 +3062,10 @@ class SuperBizAgentApp {
         const div = document.createElement("div");
         div.textContent = text || "";
         return div.innerHTML;
+    }
+
+    escapeRegExp(text) {
+        return String(text || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     }
 
     async logout() {

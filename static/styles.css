@@ -842,6 +842,74 @@ button {
     -webkit-overflow-scrolling: touch;
 }
 
+.script-prompt-scene-search {
+    display: grid;
+    gap: 6px;
+}
+
+.script-prompt-search-field {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px;
+}
+
+.script-prompt-scene-search-input {
+    width: 100%;
+    height: 38px;
+    min-width: 0;
+    padding: 0 11px;
+    border-radius: 10px;
+    color: var(--text);
+    background: rgba(250, 248, 245, 0.76);
+    border: 1px solid rgba(98, 75, 53, 0.13);
+    outline: 0;
+    font-size: 13px;
+    transition: border-color 0.18s, box-shadow 0.18s, background 0.18s;
+}
+
+.script-prompt-scene-search-input:focus {
+    background: #fffdf9;
+    border-color: rgba(233, 120, 46, 0.34);
+    box-shadow: 0 0 0 3px rgba(233, 120, 46, 0.1);
+}
+
+.script-prompt-scene-search-clear {
+    min-width: 48px;
+    height: 38px;
+    padding: 0 10px;
+    border-radius: 10px;
+    color: #7a4b24;
+    background: rgba(233, 120, 46, 0.08);
+    border: 1px solid rgba(233, 120, 46, 0.16);
+    cursor: pointer;
+}
+
+.script-prompt-scene-search-clear:hover {
+    background: rgba(233, 120, 46, 0.14);
+}
+
+.script-prompt-scene-search-clear.is-hidden {
+    display: none;
+}
+
+.script-prompt-search-meta {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+.script-prompt-scene-excerpt {
+    margin-top: 2px;
+    line-height: 1.5;
+}
+
+.script-prompt-search-mark {
+    padding: 0 2px;
+    border-radius: 4px;
+    color: inherit;
+    background: rgba(233, 120, 46, 0.22);
+}
+
 .script-prompt-structure-item {
     min-height: 48px;
     padding: 8px 10px;
@@ -2440,6 +2508,7 @@ button {
 :root[data-theme="night"] .script-prompt-select,
 :root[data-theme="night"] .script-prompt-textarea,
 :root[data-theme="night"] .script-prompt-requirement,
+:root[data-theme="night"] .script-prompt-scene-search-input,
 :root[data-theme="night"] .script-prompt-empty-state,
 :root[data-theme="night"] .script-prompt-chip,
 :root[data-theme="night"] .script-prompt-structure-item,
@@ -2453,6 +2522,7 @@ button {
 :root[data-theme="night"] .script-prompt-select:focus,
 :root[data-theme="night"] .script-prompt-textarea:focus,
 :root[data-theme="night"] .script-prompt-requirement:focus,
+:root[data-theme="night"] .script-prompt-scene-search-input:focus,
 :root[data-theme="night"] .script-prompt-chip:hover,
 :root[data-theme="night"] .script-prompt-structure-item:hover {
     background: #241f1b;
@@ -2485,10 +2555,15 @@ button {
 }
 
 :root[data-theme="night"] .script-prompt-ghost-btn,
+:root[data-theme="night"] .script-prompt-scene-search-clear,
 :root[data-theme="night"] .script-prompt-stats span {
     color: #ffc398;
     background: rgba(240, 138, 60, 0.12);
     border-color: rgba(240, 138, 60, 0.22);
+}
+
+:root[data-theme="night"] .script-prompt-search-mark {
+    background: rgba(240, 138, 60, 0.3);
 }
 
 @media (max-width: 900px) {
@@ -2997,14 +3072,12 @@ button {
     }
 
     .script-prompt-top-btn {
-        width: 38px;
+        width: auto;
+        min-width: 112px;
         height: 38px;
         justify-content: center;
-        padding: 0;
-    }
-
-    .script-prompt-top-btn span {
-        display: none;
+        padding: 0 12px;
+        gap: 6px;
     }
 
     .script-prompt-panel {
@@ -3049,14 +3122,17 @@ button {
     .script-prompt-input,
     .script-prompt-select,
     .script-prompt-textarea,
-    .script-prompt-requirement {
+    .script-prompt-requirement,
+    .script-prompt-scene-search-input {
         font-size: 16px;
     }
 
     .script-prompt-input,
     .script-prompt-select,
     .script-prompt-primary-btn,
-    .script-prompt-ghost-btn {
+    .script-prompt-ghost-btn,
+    .script-prompt-scene-search-input,
+    .script-prompt-scene-search-clear {
         min-height: 46px;
     }
 
@@ -3137,12 +3213,10 @@ button {
     }
 
     .template-selector-btn {
-        min-width: 34px;
-        padding: 0;
-    }
-
-    .template-selector-btn span {
-        display: none;
+        min-width: 64px;
+        padding: 0 10px;
+        grid-template-columns: auto auto;
+        column-gap: 5px;
     }
 
     .mode-selector-btn {
