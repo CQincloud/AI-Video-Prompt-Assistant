@@ -871,7 +871,10 @@ class AdminApp {
                     <strong>${this.escape(model.displayName)}</strong>
                     ${model.isDefault ? `<span class="badge badge-success">默认</span>` : ""}
                 </td>
-                <td>${this.escape(model.modelId)}</td>
+                <td>
+                    <strong>${this.escape(model.modelId)}</strong>
+                    <div class="muted">${this.escape(model.provider || "dashscope")}</div>
+                </td>
                 <td>${this.statusBadge(model.enabled, "启用中", "已停用")}</td>
                 <td>${usage.today || 0}</td>
                 <td>${usage.month || 0}</td>
@@ -979,7 +982,7 @@ class AdminApp {
         const model = this.state.models.rows.find((item) => item.id === id);
         if (!model) return;
         const nextEnabled = !model.enabled;
-        if (!window.confirm(`确认${nextEnabled ? "启用" : "停用"}模型 ${model.modelId}？`)) return;
+        if (!window.confirm(`确认${nextEnabled ? "启用" : "停用"}模型 ${model.provider || "dashscope"} / ${model.modelId}？`)) return;
         await this.request(`/api/admin/model-catalog/${id}/enabled`, {
             method: "PATCH",
             body: JSON.stringify({ enabled: nextEnabled }),
@@ -990,7 +993,7 @@ class AdminApp {
     async setDefaultModel(id) {
         const model = this.state.models.rows.find((item) => item.id === id);
         if (!model) return;
-        if (!window.confirm(`确认将 ${model.modelId} 设为默认模型？`)) return;
+        if (!window.confirm(`确认将 ${model.provider || "dashscope"} / ${model.modelId} 设为默认模型？`)) return;
         await this.request(`/api/admin/model-catalog/${id}/default`, { method: "PATCH" });
         await this.loadModels();
     }
@@ -998,7 +1001,7 @@ class AdminApp {
     async deleteModel(id) {
         const model = this.state.models.rows.find((item) => item.id === id);
         if (!model) return;
-        if (!window.confirm(`确认删除模型 ${model.modelId}？历史用量统计会保留。`)) return;
+        if (!window.confirm(`确认删除模型 ${model.provider || "dashscope"} / ${model.modelId}？历史用量统计会保留。`)) return;
         await this.request(`/api/admin/model-catalog/${id}`, { method: "DELETE" });
         await this.loadModels();
     }
@@ -1021,7 +1024,7 @@ class AdminApp {
             : `<div class="empty">近 30 天暂无用户使用记录</div>`;
         this.openDrawer("模型用量", `
             <div class="detail-list">
-                ${this.detailRow("模型", `${this.escape(data.model.displayName)} / ${this.escape(data.model.modelId)}`)}
+                ${this.detailRow("模型", `${this.escape(data.model.provider || "dashscope")} / ${this.escape(data.model.displayName)} / ${this.escape(data.model.modelId)}`)}
                 ${this.detailRow("近 30 天调用", summary.total || 0)}
                 ${this.detailRow("成功", summary.successTotal || 0)}
                 ${this.detailRow("失败", summary.failureTotal || 0)}

@@ -110,7 +110,7 @@ def _model_error(exc: ModelCatalogError) -> JSONResponse:
 
 def _model_metadata(model: dict[str, Any]) -> dict[str, Any]:
     return {
-        "model": model.get("modelId"),
+        "model": model.get("modelKey") or model.get("modelId"),
         "modelDisplayName": model.get("displayName"),
         "modelProvider": model.get("provider"),
     }
@@ -118,6 +118,7 @@ def _model_metadata(model: dict[str, Any]) -> dict[str, Any]:
 
 def _public_model(model: dict[str, Any]) -> dict[str, Any]:
     return {
+        "modelKey": model.get("modelKey"),
         "modelId": model.get("modelId"),
         "displayName": model.get("displayName"),
         "provider": model.get("provider"),
@@ -531,7 +532,7 @@ async def chat(payload: ChatRequest, request: Request):
         answer = await rag_agent_service.query(
             model_question,
             session_id=agent_thread_id,
-            model_name=selected_model["modelId"],
+            model=selected_model,
         )
         duration_ms = int((perf_counter() - usage_started_at) * 1000)
         model_service.record_usage(
@@ -646,7 +647,7 @@ async def chat_stream(payload: ChatRequest, request: Request):
             async for chunk in rag_agent_service.query_stream(
                 model_question,
                 session_id=agent_thread_id,
-                model_name=selected_model["modelId"],
+                model=selected_model,
                 emit_auxiliary_events=False,
             ):
                 chunk_type = chunk.get("type", "unknown")

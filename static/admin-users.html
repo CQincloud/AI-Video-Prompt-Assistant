@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>后台管理 - 炽橙 AI 视频提示词</title>
+    <title>后台管理 - 炬成 AI 视频提示词</title>
     <link rel="stylesheet" href="/static/admin.css?v=20260602-models3">
 </head>
 <body>
@@ -11,7 +11,7 @@
         <aside class="sidebar">
             <div>
                 <div class="brand">
-                    <h1>炽橙 AI 视频提示词后台</h1>
+                    <h1>炬成 AI 视频提示词后台</h1>
                     <p>知识库运营控制台</p>
                 </div>
                 <nav class="menu" aria-label="后台菜单">
@@ -466,7 +466,10 @@
             </label>
             <label class="field">
                 <span>供应商</span>
-                <input id="modelProvider" type="text" maxlength="50" value="dashscope">
+                <select id="modelProvider">
+                    <option value="dashscope">DashScope / 阿里云</option>
+                    <option value="deepseek">DeepSeek 官方</option>
+                </select>
             </label>
             <label class="field">
                 <span>排序</span>
@@ -492,6 +495,6 @@
         </form>
     </dialog>
 
-    <script src="/static/admin-users.js?v=20260602-models3"></script>
+    <script src="/static/admin-users.js?v=20260605-deepseek1"></script>
 </body>
 </html>
