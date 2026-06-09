@@ -89,6 +89,26 @@ button {
     border: 0;
 }
 
+body.app-booting .new-chat-btn,
+body.app-booting .mobile-menu-btn,
+body.app-booting .script-prompt-top-btn,
+body.app-booting .account-pill,
+body.app-booting .quick-prompt-card,
+body.app-booting .tools-btn,
+body.app-booting .template-selector-btn,
+body.app-booting .model-selector-btn,
+body.app-booting .mode-selector-btn,
+body.app-booting .send-btn-circle,
+body.app-booting .message-input {
+    opacity: 0.62;
+    pointer-events: none;
+    cursor: default;
+}
+
+body.app-booting .input-wrapper {
+    opacity: 0.9;
+}
+
 .app-layout {
     width: 100vw;
     height: 100vh;

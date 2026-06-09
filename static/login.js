@@ -101,7 +101,8 @@ class LoginPage {
             }
 
             this.setMessage("登录成功，正在进入助手。", "success");
-            window.location.href = this.getRedirectPath();
+            await this.waitForSessionReady();
+            window.location.replace(this.getRedirectPath());
         } catch (error) {
             this.setMessage(error.message || "登录失败，请稍后再试");
             this.loginBtn.disabled = false;
@@ -120,6 +121,27 @@ class LoginPage {
                 data: null,
             };
         }
+    }
+
+    async waitForSessionReady() {
+        for (const delay of [300, 700, 1200, 1800]) {
+            await this.sleep(delay);
+            try {
+                const response = await fetch("/api/auth/me", {
+                    credentials: "include",
+                    cache: "no-store",
+                });
+                if (response.ok) return true;
+            } catch (error) {
+                console.debug("Auth cookie check retry", error);
+            }
+        }
+        console.debug("Auth cookie check did not pass before redirect; continuing navigation");
+        return false;
+    }
+
+    sleep(milliseconds) {
+        return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
     }
 
     getPhone() {

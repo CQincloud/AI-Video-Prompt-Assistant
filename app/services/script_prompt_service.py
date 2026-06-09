@@ -102,6 +102,13 @@ class ScriptPromptService:
         "午前",
         "午后",
         "日间",
+        "夜里",
+        "半夜",
+        "稍晚",
+        "稍后",
+        "片刻后",
+        "同日夜",
+        "同日",
     }
     EMOTION_WORDS = [
         "害怕",
@@ -1035,7 +1042,22 @@ class ScriptPromptService:
         script_text: str,
         characters: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        lines = script_text.splitlines()
+        all_lines = script_text.splitlines()
+        lines, is_body_scoped = self._get_scene_scan_lines(all_lines)
+        scenes = self._parse_scenes_from_lines(lines)
+        if not scenes and is_body_scoped:
+            scenes = self._parse_scenes_from_lines(all_lines)
+
+        if not scenes:
+            scenes = self._fallback_single_scene(script_text)
+
+        character_names = [character["name"] for character in characters]
+        for scene in scenes:
+            content = "\n".join(scene.get("content_lines") or [])
+            scene["characters"] = [name for name in character_names if self._mentions_character(content, name)]
+        return scenes
+
+    def _parse_scenes_from_lines(self, lines: list[str]) -> list[dict[str, Any]]:
         current_act = ""
         current_episode = ""
         current_scene: dict[str, Any] | None = None
@@ -1078,15 +1100,19 @@ class ScriptPromptService:
 
         if current_scene:
             scenes.append(current_scene)
-
-        if not scenes:
-            scenes = self._fallback_single_scene(script_text)
-
-        character_names = [character["name"] for character in characters]
-        for scene in scenes:
-            content = "\n".join(scene.get("content_lines") or [])
-            scene["characters"] = [name for name in character_names if self._mentions_character(content, name)]
         return scenes
+
+    def _get_scene_scan_lines(self, lines: list[str]) -> tuple[list[str], bool]:
+        for index, line in enumerate(lines):
+            if self._is_script_body_heading(line):
+                return lines[index + 1 :], True
+        return lines, False
+
+    def _is_script_body_heading(self, line: str) -> bool:
+        clean = self._clean_inline_markdown(line.lstrip("#").strip())
+        clean = re.sub(r"^[一二三四五六七八九十百千万零〇两\d]+[、.．]\s*", "", clean)
+        clean = clean.strip(" ：:，,。")
+        return bool(re.search(r"(?:正文剧本|剧本正文|分场剧本|正文|正片剧本|分场正文)$", clean))
 
     def _parse_episode_heading(self, line: str) -> str | None:
         clean = line.lstrip("#").strip()
@@ -1098,12 +1124,44 @@ class ScriptPromptService:
         return f"{episode} · {title}" if title else episode
 
     def _parse_scene_heading(self, line: str) -> dict[str, str] | None:
-        clean = line.lstrip("#").strip()
-        markdown_match = re.match(r"^(场景[^\s]+)\s+(.+?)\s*$", clean)
+        clean = self._clean_inline_markdown(line.lstrip("#").strip())
+        clean = clean.strip()
+
+        bracket_match = re.match(
+            r"^[【\[]\s*((?:场景\s*)?[一二三四五六七八九十百千万零〇两\d]+|(?:第\s*)?[一二三四五六七八九十百千万零〇两\d]+\s*场|序场|片头|尾声|结尾|彩蛋)\s*[】\]]\s*(.+?)\s*$",
+            clean,
+        )
+        if bracket_match:
+            return {
+                "scene_number": self._normalize_scene_label(bracket_match.group(1)),
+                "rest": bracket_match.group(2).strip(),
+            }
+
+        markdown_match = re.match(r"^(场景\s*[^\s:：、，,.-]+)\s+(.+?)\s*$", clean)
         if markdown_match:
             return {
-                "scene_number": markdown_match.group(1).strip(),
+                "scene_number": self._normalize_scene_label(markdown_match.group(1)),
                 "rest": markdown_match.group(2).strip(),
+            }
+
+        chinese_scene_match = re.match(
+            r"^(场景\s*[一二三四五六七八九十百千万零〇两\d]+)\s*[·.．、:：\-—]\s*(.+?)\s*$",
+            clean,
+        )
+        if chinese_scene_match:
+            return {
+                "scene_number": self._normalize_scene_label(chinese_scene_match.group(1)),
+                "rest": chinese_scene_match.group(2).strip(),
+            }
+
+        ordinal_scene_match = re.match(
+            r"^((?:第\s*)?[一二三四五六七八九十百千万零〇两\d]+\s*场)\s*[·.．、:：\-—]\s*(.+?)\s*$",
+            clean,
+        )
+        if ordinal_scene_match:
+            return {
+                "scene_number": self._normalize_scene_label(ordinal_scene_match.group(1)),
+                "rest": ordinal_scene_match.group(2).strip(),
             }
 
         numbered_match = re.match(
@@ -1114,6 +1172,13 @@ class ScriptPromptService:
             return {
                 "scene_number": re.sub(r"\s+", "", numbered_match.group(1)),
                 "rest": numbered_match.group(2).strip(),
+            }
+
+        loose_numbered_match = re.match(r"^(\d+(?:\.\d+)*)\s*[.．、:：\-—]\s*(.+?)\s*$", clean)
+        if loose_numbered_match and self._looks_like_scene_heading_rest(loose_numbered_match.group(2)):
+            return {
+                "scene_number": f"场{loose_numbered_match.group(1).strip()}",
+                "rest": loose_numbered_match.group(2).strip(),
             }
 
         special_terms = "|".join(
@@ -1127,6 +1192,23 @@ class ScriptPromptService:
                 "rest": special_match.group(2).strip(),
             }
         return None
+
+    def _normalize_scene_label(self, label: str) -> str:
+        clean = re.sub(r"\s+", "", self._clean_inline_markdown(label or ""))
+        if re.fullmatch(r"[一二三四五六七八九十百千万零〇两\d]+", clean):
+            return f"场景{clean}"
+        return clean
+
+    def _looks_like_scene_heading_rest(self, rest: str) -> bool:
+        clean = self._clean_inline_markdown(rest).strip()
+        if not clean or len(clean) > 80:
+            return False
+        if re.search(r"(剧本类型|人物设定|故事梗概|正文剧本|人物表|角色设定|大纲)$", clean):
+            return False
+        location, time_label = self._split_scene_heading(clean)
+        if time_label:
+            return True
+        return bool(re.search(r"(内|外|街|路|巷|店|馆|厅|房|屋|楼|车|宫|院|山|河|海|城|村|厨房|卧室|客厅|办公室|面馆)", location))
 
     def _fallback_single_scene(self, script_text: str) -> list[dict[str, Any]]:
         return [
@@ -1231,6 +1313,10 @@ class ScriptPromptService:
 
     def _split_scene_heading(self, heading: str) -> tuple[str, str]:
         clean = heading.strip()
+        bracket_time = re.match(r"^(.+?)[（(]([^（）()]+)[）)]$", clean)
+        if bracket_time and self._is_time_label(bracket_time.group(2)):
+            return bracket_time.group(1).strip() or "未明确地点", bracket_time.group(2).strip()
+
         dotted_parts = self._split_scene_heading_parts(clean)
         if len(dotted_parts) >= 2 and self._is_time_label(dotted_parts[-1]):
             return "·".join(dotted_parts[:-1]).strip() or "未明确地点", dotted_parts[-1]
@@ -1251,7 +1337,7 @@ class ScriptPromptService:
                 depth += 1
             elif char in "）)" and depth > 0:
                 depth -= 1
-            if char in "·|｜/" and depth == 0:
+            if char in "·|｜/，,、；;—-" and depth == 0:
                 part = "".join(current).strip()
                 if part:
                     parts.append(part)
@@ -1269,7 +1355,7 @@ class ScriptPromptService:
             return True
         return bool(
             re.match(
-                r"^(?:白日|白天|夜晚|雨日|雨夜|雨天|下雨|小雨|大雨|暴雨|晴天|阴天|雪日|雪夜|雪天|下雪|黎明|拂晓|黄昏|傍晚|清晨|早晨|凌晨|上午|中午|下午|午前|午后|深夜|日间|日|夜|早|晨|午|晚|晴|阴)(?:[（(].*)?$",
+                r"^(?:白日|白天|夜晚|夜里|雨日|雨夜|雨天|下雨|小雨|大雨|暴雨|晴天|阴天|雪日|雪夜|雪天|下雪|黎明|拂晓|黄昏|傍晚|清晨|早晨|凌晨|上午|中午|下午|午前|午后|深夜|半夜|日间|稍晚|稍后|片刻后|同日夜|同日|日|夜|早|晨|午|晚|晴|阴)(?:[（(].*)?$",
                 clean,
             )
         )
